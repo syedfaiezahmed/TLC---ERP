@@ -79,12 +79,18 @@ if (process.env.NODE_ENV !== 'production') {
 // This ensures that for every request, the DB connection is established (or reused)
 // BEFORE the route handler is executed.
 app.use(async (req, res, next) => {
+  if (!process.env.MONGO_URI) {
+    return res.status(503).json({
+      message: 'MONGO_URI is not configured.',
+      fix: 'Add MONGO_URI to Vercel Project Settings → Environment Variables and redeploy.'
+    });
+  }
   try {
     await connectDB();
     next();
   } catch (error) {
-    console.error("Database Connection Failed:", error);
-    res.status(500).json({ message: "Database connection failed", error: error.message });
+    console.error("Database Connection Failed:", error.message);
+    res.status(503).json({ message: "Database connection failed. Check MONGO_URI and MongoDB Atlas IP whitelist.", error: error.message });
   }
 });
 
@@ -179,15 +185,9 @@ app.get('/api', (req, res) => {
   });
 });
 
-// ── Production: serve React build ────────────────────────────────────────────
-if (process.env.NODE_ENV === 'production') {
-  const distPath = path.join(__dirname, '../../client/dist');
-  app.use(express.static(distPath));
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(distPath, 'index.html'));
-  });
-} else {
-  // 404 Handler (dev only — in prod, React router handles unknown paths)
+// ── Dev only: 404 handler ────────────────────────────────────────────────────
+// In production (Vercel), static files are served by CDN — not by Express.
+if (process.env.NODE_ENV !== 'production') {
   app.use((req, res, next) => {
     const error = new Error(`Not Found - ${req.originalUrl}`);
     res.status(404);
