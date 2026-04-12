@@ -311,6 +311,7 @@ const reportSlice = createSlice({
       })
       .addCase(getRevenueDetailReport.pending, (state) => {
           state.loading = true;
+          state.reportError = null;
       })
       .addCase(getRevenueDetailReport.fulfilled, (state, action) => {
           state.loading = false;
@@ -318,6 +319,7 @@ const reportSlice = createSlice({
       })
       .addCase(getTeacherExpensesDetailReport.pending, (state) => {
           state.loading = true;
+          state.reportError = null;
       })
       .addCase(getTeacherExpensesDetailReport.fulfilled, (state, action) => {
           state.loading = false;
@@ -386,8 +388,6 @@ const reportSlice = createSlice({
           state.loading = false;
           state.reportError = action.payload?.message || 'Failed to load cash flow statement';
       })
-      .addCase(getRevenueDetailReport.pending, (state) => { state.loading = true; state.reportError = null; })
-      .addCase(getTeacherExpensesDetailReport.pending, (state) => { state.loading = true; state.reportError = null; })
       .addCase(getTeacherStatement.rejected, (state, action) => {
           state.loading = false;
           state.reportError = action.payload?.message || 'Failed to load teacher statement';
