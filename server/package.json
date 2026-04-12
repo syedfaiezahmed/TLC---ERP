@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "nodemon --config nodemon.json src/index.js"
+    "dev": "nodemon --config nodemon.json src/index.js",
+    "db:reset": "node scripts/resetData.js --confirm"
   },
   "keywords": [],
   "author": "",
