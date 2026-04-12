@@ -922,14 +922,15 @@ const getTeacherStatement = async (req, res) => {
         const companyObj = new mongoose.Types.ObjectId(companyId);
         const teacherObj = new mongoose.Types.ObjectId(teacherId);
 
+        const dateMatch = {};
+        if (startDate) dateMatch.$gte = new Date(startDate);
+        if (endDate)   dateMatch.$lte = new Date(endDate);
+
         const query = {
             company: companyObj,
             teacher: teacherObj,
+            ...(Object.keys(dateMatch).length ? { date: dateMatch } : {}),
         };
-
-        if (startDate && endDate) {
-            query.date = { $gte: new Date(startDate), $lte: new Date(endDate) };
-        }
 
         const ledgerEntries = await Ledger.find(query)
             .sort({ date: 1, createdAt: 1 })

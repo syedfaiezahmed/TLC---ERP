@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import StudentEnrollment from '../models/StudentEnrollment.js';
 import Student from '../models/Student.js';
 import Course from '../models/Course.js';
@@ -273,7 +274,7 @@ const getEnrollmentStatistics = async (req, res) => {
     if (startDate) dateFilter.$gte = new Date(startDate);
     if (endDate) dateFilter.$lte = new Date(endDate);
 
-    const baseQuery = { company: companyId };
+    const baseQuery = { company: new mongoose.Types.ObjectId(companyId) };
     if (startDate || endDate) {
       baseQuery.enrollmentDate = dateFilter;
     }

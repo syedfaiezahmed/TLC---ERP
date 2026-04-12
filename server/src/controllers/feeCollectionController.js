@@ -3,6 +3,7 @@ import feeCalculationService from '../services/feeCalculationService.js';
 import FeePayment from '../models/FeePayment.js';
 import FeeVoucher from '../models/FeeVoucher.js';
 import Ledger from '../models/Ledger.js';
+import mongoose from 'mongoose';
 import { postFeeCollectionJournal } from '../services/journalService.js';
 import { logAudit } from '../services/auditService.js';
 import { recalculateLedger } from '../services/ledgerService.js';
@@ -345,7 +346,8 @@ class FeeCollectionController {
       const companyId = resolveCompanyId(req);
       if (!companyId) return res.status(400).json({ success: false, message: 'Company ID is required' });
 
-      const matchStage = { company: companyId, status: 'active' };
+      const companyObjId = new mongoose.Types.ObjectId(companyId);
+      const matchStage = { company: companyObjId, status: 'active' };
 
       if (startDate || endDate) {
         matchStage.paymentDate = {};

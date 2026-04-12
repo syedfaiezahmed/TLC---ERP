@@ -32,7 +32,7 @@ const getFeeCollectionReport = async (req, res) => {
         if (cached) return res.json(cached);
 
         const companyObjectId = new mongoose.Types.ObjectId(companyId);
-        const matchStage = { company: companyObjectId };
+        const matchStage = { company: companyObjectId, status: status || 'active' };
 
         // Date filtering
         if (startDate && endDate) {
@@ -40,11 +40,14 @@ const getFeeCollectionReport = async (req, res) => {
                 $gte: new Date(startDate),
                 $lte: new Date(endDate)
             };
+        } else if (startDate) {
+            matchStage.paymentDate = { $gte: new Date(startDate) };
+        } else if (endDate) {
+            matchStage.paymentDate = { $lte: new Date(endDate) };
         }
 
         // Additional filters
         if (studentId) matchStage.student = new mongoose.Types.ObjectId(studentId);
-        if (status) matchStage.status = status;
 
         const pipeline = [
             { $match: matchStage },
@@ -56,7 +59,7 @@ const getFeeCollectionReport = async (req, res) => {
                     as: 'student'
                 }
             },
-            { $unwind: '$student' },
+            { $unwind: { path: '$student', preserveNullAndEmptyArrays: true } },
             {
                 $lookup: {
                     from: 'fees',
@@ -241,7 +244,7 @@ const getPendingFeesReport = async (req, res) => {
                     as: 'student'
                 }
             },
-            { $unwind: '$student' },
+            { $unwind: { path: '$student', preserveNullAndEmptyArrays: true } },
             {
                 $lookup: {
                     from: 'feevouchers',
@@ -755,7 +758,7 @@ const getVoucherReport = async (req, res) => {
                     as: 'student'
                 }
             },
-            { $unwind: '$student' },
+            { $unwind: { path: '$student', preserveNullAndEmptyArrays: true } },
             {
                 $lookup: {
                     from: 'fees',

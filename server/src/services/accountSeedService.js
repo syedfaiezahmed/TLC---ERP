@@ -115,11 +115,11 @@ export const ensureMissingAccounts = async (companyId) => {
     { code: '51012', name: 'Depreciation Expense', type: 'expense' },
   ];
 
-  const existing = await Account.find({ company: companyId }).select('name').lean();
-  const existingNames = new Set(existing.map((a) => a.name));
+  const existing = await Account.find({ company: companyId }).select('code').lean();
+  const existingCodes = new Set(existing.map((a) => a.code));
 
   const toInsert = systemAccounts
-    .filter((a) => !existingNames.has(a.name))
+    .filter((a) => !existingCodes.has(a.code))
     .map((a) => ({ ...a, company: companyId, isSystem: true, isActive: true }));
 
   if (toInsert.length > 0) {

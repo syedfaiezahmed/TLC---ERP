@@ -21,6 +21,8 @@ class FeeCollectionService {
         notes,
         discountAmount = 0,
         discountReason,
+        lateFeeIncluded = false,
+        lateFeeAmount: providedLateFeeAmount,
       } = paymentData;
 
       // ── Validate required fields ─────────────────────────────────────────────
@@ -136,8 +138,8 @@ class FeeCollectionService {
         bankName: bankName || undefined,
         chequeNumber: chequeNumber || undefined,
         transactionId: transactionId || undefined,
-        lateFeeApplied: isOverdue,
-        lateFeeAmount: isOverdue ? (voucher.lateFeeAmount || 0) : 0,
+        lateFeeApplied: lateFeeIncluded,
+        lateFeeAmount: lateFeeIncluded ? (Number(providedLateFeeAmount) || voucher.lateFeeAmount || 0) : 0,
         discountApplied: Number(discountAmount) > 0,
         discountAmount: Number(discountAmount) || 0,
         discountReason: discountReason || undefined,
@@ -244,8 +246,8 @@ class FeeCollectionService {
       limit = 20
     } = filters;
 
-    // Build query
-    const query = { company: companyId };
+    // Build query — default to active payments only
+    const query = { company: companyId, status: status || 'active' };
 
     if (student) {
       query.student = student;
@@ -259,10 +261,6 @@ class FeeCollectionService {
 
     if (paymentMethod) {
       query.paymentMethod = paymentMethod;
-    }
-
-    if (status) {
-      query.status = status;
     }
 
     // Get payments with pagination
