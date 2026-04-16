@@ -19,6 +19,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TablePagination,
   TextField,
   Typography,
   IconButton,
@@ -65,12 +66,12 @@ const Students = () => {
   const { companyId } = useParams();
   
   const { selectedCompany } = useSelector((state) => state.companies);
-  const { students, loading } = useSelector((state) => state.students);
+  const { students, loading, total, pages } = useSelector((state) => state.students);
   
   const [open, setOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [currentPage] = useState(0);
-  const [rowsPerPage] = useState(10);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
   
   const [currentStudent, setCurrentStudent] = useState(null);
   const [formData, setFormData] = useState({
@@ -100,6 +101,20 @@ const Students = () => {
       }));
     }
   }, [dispatch, selectedCompany, companyId, currentPage, rowsPerPage, searchTerm]);
+
+  const handlePageChange = (event, newPage) => {
+    setCurrentPage(newPage);
+  };
+
+  const handleRowsPerPageChange = (event) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setCurrentPage(0);
+  };
+
+  const handleSearchChange = (value) => {
+    setSearchTerm(value);
+    setCurrentPage(0); // Reset to first page when searching
+  };
 
   const handleOpen = (student = null) => {
     if (student) {
@@ -190,13 +205,8 @@ const Students = () => {
     }
   };
 
-  const filteredStudents = (students || []).filter(student =>
-    student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (student.email && student.email.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
-
   const handleExport = (type) => {
-      const data = filteredStudents.map(c => ({
+      const data = (students || []).map(c => ({
           name: c.name,
           email: c.email || '-',
           contact: c.contact || '-',
@@ -288,7 +298,7 @@ const Students = () => {
               size="small"
               placeholder="Search students by name, email, or contact..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
@@ -434,6 +444,25 @@ const Students = () => {
           </TableBody>
         </Table>
       </TableContainer>
+
+      {/* Pagination */}
+      <TablePagination
+        component="div"
+        count={total || 0}
+        page={currentPage}
+        onPageChange={handlePageChange}
+        rowsPerPage={rowsPerPage}
+        onRowsPerPageChange={handleRowsPerPageChange}
+        rowsPerPageOptions={[5, 10, 25, 50]}
+        sx={{
+          '.MuiTablePagination-toolbar': {
+            justifyContent: 'flex-end',
+          },
+          '.MuiTablePagination-spacer': {
+            display: 'none',
+          },
+        }}
+      />
 
       {/* Add/Edit Dialog */}
       <Dialog
