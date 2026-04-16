@@ -286,6 +286,7 @@ class VoucherController {
             count: { $sum: 1 },
             totalFee: { $sum: '$totalFee' },
             totalPaid: { $sum: '$paidAmount' },
+            totalDiscount: { $sum: { $ifNull: ['$paymentDiscountTotal', 0] } },
           }
         }
       ]);
@@ -297,6 +298,7 @@ class VoucherController {
         pending: 0, paid: 0, partial: 0, overdue: 0, cancelled: 0,
         totalAmount: 0,
         totalPaidAmount: 0,
+        totalDiscountAmount: 0,
         totalPendingAmount: 0,
         totalOverdueAmount: 0,
       };
@@ -306,10 +308,12 @@ class VoucherController {
         summary[s] = (summary[s] || 0) + stat.count;
         if (s === 'cancelled') continue; // exclude written-off vouchers from financial totals
         summary.totalAmount += stat.totalFee || 0;
-        // Count cash actually collected across ALL statuses (paid + partial + overdue-with-partial)
+        // Cash actually collected (settles bank/cash account)
         summary.totalPaidAmount += stat.totalPaid || 0;
-        // Pending/overdue amounts are NET balances (totalFee - paidAmount)
-        const netDue = Math.max(0, (stat.totalFee || 0) - (stat.totalPaid || 0));
+        summary.totalDiscountAmount += stat.totalDiscount || 0;
+        // NET balance due = totalFee − (cash received + discount allowed)
+        const effectivePaid = (stat.totalPaid || 0) + (stat.totalDiscount || 0);
+        const netDue = Math.max(0, (stat.totalFee || 0) - effectivePaid);
         if (s === 'pending' || s === 'partial') summary.totalPendingAmount += netDue;
         if (s === 'overdue') summary.totalOverdueAmount += netDue;
       }

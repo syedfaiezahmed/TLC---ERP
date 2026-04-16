@@ -57,34 +57,45 @@ const _doHeal = async (companyId) => {
   try {
     const companyObjId = new mongoose.Types.ObjectId(companyId);
 
-    // ── PHASE 1: Rebuild paidAmount from FeePayment records ────────────────
+    // ── PHASE 1: Rebuild paidAmount + discountFromPayments from FeePayment ─
+    // Settlement = cash received + discount allowed. Both count toward clearing the voucher.
     const paymentSums = await FeePayment.aggregate([
       { $match: { company: companyObjId, status: 'active', voucher: { $ne: null } } },
-      { $group: { _id: '$voucher', totalPaid: { $sum: '$amount' } } },
+      {
+        $group: {
+          _id: '$voucher',
+          totalPaid: { $sum: '$amount' },
+          totalDiscount: { $sum: { $ifNull: ['$discountAmount', 0] } },
+        },
+      },
     ]);
 
     const touchedVoucherIds = paymentSums.map((p) => p._id);
+    // Map voucherId → {paid, discount} for Phase 2 lookup
+    const settlementByVoucher = new Map(
+      paymentSums.map((p) => [String(p._id), { paid: p.totalPaid || 0, discount: p.totalDiscount || 0 }])
+    );
 
     if (paymentSums.length > 0) {
       const bulkOps = paymentSums.map((p) => ({
         updateOne: {
           filter: { _id: p._id, company: companyObjId },
-          update: { $set: { paidAmount: p.totalPaid } },
+          update: { $set: { paidAmount: p.totalPaid, paymentDiscountTotal: p.totalDiscount || 0 } },
         },
       }));
       const bulkRes = await FeeVoucher.bulkWrite(bulkOps, { ordered: false });
-      console.log(`[healVoucherStatuses] Phase 1: paidAmount rebuilt for ${bulkRes.modifiedCount || 0} vouchers (${paymentSums.length} payment groups)`);
+      console.log(`[healVoucherStatuses] Phase 1: paidAmount + paymentDiscountTotal rebuilt for ${bulkRes.modifiedCount || 0} vouchers (${paymentSums.length} payment groups)`);
     }
 
-    // Reset paidAmount = 0 on vouchers that have no active payments
+    // Reset paidAmount + paymentDiscountTotal = 0 on vouchers that have no active payments
     const resetRes = await FeeVoucher.updateMany(
       {
         company: companyObjId,
         _id: { $nin: touchedVoucherIds },
         status: { $ne: 'cancelled' },
-        paidAmount: { $gt: 0 },
+        $or: [{ paidAmount: { $gt: 0 } }, { paymentDiscountTotal: { $gt: 0 } }],
       },
-      { $set: { paidAmount: 0 } }
+      { $set: { paidAmount: 0, paymentDiscountTotal: 0 } }
     );
     if (resetRes.modifiedCount > 0) {
       console.log(`[healVoucherStatuses] Phase 1: reset paidAmount=0 on ${resetRes.modifiedCount} orphan vouchers`);
@@ -102,14 +113,18 @@ const _doHeal = async (companyId) => {
 
     for (const v of vouchers) {
       const paidAmount = Number(v.paidAmount) || 0;
+      const settlement = settlementByVoucher.get(String(v._id));
+      const discountFromPayments = settlement ? Number(settlement.discount) || 0 : 0;
+      // CA-correct: effective settlement = cash received + discount allowed
+      const effectivePaid = paidAmount + discountFromPayments;
       const totalFee = Number(v.totalFee) || 0;
       const dueDate = v.dueDate ? new Date(v.dueDate) : null;
       const isPastDue = dueDate && dueDate < now;
 
       let newStatus;
-      if (paidAmount >= totalFee - 0.5) newStatus = 'paid';
-      else if (paidAmount > 0 && isPastDue) newStatus = 'overdue';
-      else if (paidAmount > 0) newStatus = 'partial';
+      if (effectivePaid >= totalFee - 0.5) newStatus = 'paid';
+      else if (effectivePaid > 0 && isPastDue) newStatus = 'overdue';
+      else if (effectivePaid > 0) newStatus = 'partial';
       else if (isPastDue) newStatus = 'overdue';
       else newStatus = 'pending';
 

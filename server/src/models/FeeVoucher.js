@@ -78,6 +78,13 @@ const feeVoucherSchema = mongoose.Schema(
       type: Number,
       default: 0,
     },
+    // Sum of discount amounts across all active FeePayments for this voucher.
+    // Maintained by voucherHealService.js — used to compute effectivePaid = paidAmount + paymentDiscountTotal.
+    // Separate from the schema-level `totalDiscount` (which is line-item discount baked in at generation).
+    paymentDiscountTotal: {
+      type: Number,
+      default: 0,
+    },
     paymentMethod: {
       type: String,
       enum: ['Cash', 'Bank Transfer', 'Cheque', 'Online'],
