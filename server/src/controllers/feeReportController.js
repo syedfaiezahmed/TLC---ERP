@@ -207,17 +207,17 @@ const getFeeCollectionReport = async (req, res) => {
 // @desc    Get Pending Fees Report
 // @route   GET /api/reports/pending-fees/:companyId
 // @access  Private/Admin/Accountant
+// CA-correct: uses FeeVoucher as source of truth (matches Fee Management workflow).
+// Heals vouchers first so data is never stale. Net due = totalFee − (paidAmount + paymentDiscount).
 const getPendingFeesReport = async (req, res) => {
     try {
         const { companyId } = req.params;
-        const { 
-            asOfDate, 
-            studentId, 
-            courseId, 
-            batchId, 
+        const {
+            asOfDate,
+            studentId,
             overdueOnly,
-            page = 1, 
-            limit = 50 
+            page = 1,
+            limit = 50
         } = req.query;
 
         const cacheKey = makeKey('pending-fees', { companyId, ...req.query });
@@ -227,170 +227,150 @@ const getPendingFeesReport = async (req, res) => {
         const companyObjectId = new mongoose.Types.ObjectId(companyId);
         const asOf = asOfDate ? new Date(asOfDate) : new Date();
 
-        const matchStage = { 
-            company: companyObjectId,
-            status: { $in: ['unpaid', 'partial'] },
-            balanceDue: { $gt: 0 }
-        };
-
-        if (studentId) matchStage.student = new mongoose.Types.ObjectId(studentId);
-        
-        if (overdueOnly === 'true') {
-            matchStage.dueDate = { $lt: asOf };
+        // Heal voucher statuses first so pending report is never stale.
+        try {
+            const { healVoucherStatuses } = await import('../services/voucherHealService.js');
+            await healVoucherStatuses(companyId);
+        } catch (healErr) {
+            console.warn('[getPendingFeesReport] heal skipped:', healErr.message);
         }
 
-        const pipeline = [
+        // Match unpaid vouchers (pending/partial/overdue) with positive balance.
+        const matchStage = {
+            company: companyObjectId,
+            status: { $in: ['pending', 'partial', 'overdue'] },
+        };
+        if (studentId) matchStage.student = new mongoose.Types.ObjectId(studentId);
+        if (overdueOnly === 'true') matchStage.dueDate = { $lt: asOf };
+
+        const basePipeline = [
             { $match: matchStage },
+            {
+                $addFields: {
+                    effectivePaid: {
+                        $add: [
+                            { $ifNull: ['$paidAmount', 0] },
+                            { $ifNull: ['$paymentDiscountTotal', 0] },
+                        ],
+                    },
+                },
+            },
+            {
+                $addFields: {
+                    balanceDue: {
+                        $max: [0, { $subtract: [{ $ifNull: ['$totalFee', 0] }, '$effectivePaid'] }],
+                    },
+                    isOverdue: { $lt: ['$dueDate', asOf] },
+                    daysOverdue: {
+                        $cond: {
+                            if: { $lt: ['$dueDate', asOf] },
+                            then: { $floor: { $divide: [{ $subtract: [asOf, '$dueDate'] }, 1000 * 60 * 60 * 24] } },
+                            else: 0,
+                        },
+                    },
+                },
+            },
+            // Keep only truly pending: balance due > 0 after settlement.
+            { $match: { balanceDue: { $gt: 0 } } },
             {
                 $lookup: {
                     from: 'students',
                     localField: 'student',
                     foreignField: '_id',
-                    as: 'student'
-                }
+                    as: 'student',
+                },
             },
             { $unwind: { path: '$student', preserveNullAndEmptyArrays: true } },
             {
-                $lookup: {
-                    from: 'feevouchers',
-                    localField: '_id',
-                    foreignField: 'fee',
-                    as: 'vouchers'
-                }
-            },
-            {
-                $lookup: {
-                    from: 'feepayments',
-                    localField: '_id',
-                    foreignField: 'fee',
-                    as: 'payments'
-                }
-            }
-        ];
-
-        // Course and Batch filtering
-        if (courseId || batchId) {
-            pipeline.push({
-                $lookup: {
-                    from: 'studentenrollments',
-                    localField: 'student',
-                    foreignField: 'student',
-                    as: 'enrollments'
-                }
-            });
-            pipeline.push({ $unwind: '$enrollments' });
-            
-            if (courseId) {
-                pipeline.push({ 
-                    $match: { 'enrollments.course': new mongoose.Types.ObjectId(courseId) } 
-                });
-            }
-            if (batchId) {
-                pipeline.push({ 
-                    $match: { 'enrollments.batch': new mongoose.Types.ObjectId(batchId) } 
-                });
-            }
-        }
-
-        pipeline.push(
-            {
-                $addFields: {
-                    totalPaid: { $sum: '$payments.amount' },
-                    daysOverdue: {
-                        $cond: {
-                            if: { $lt: ['$dueDate', asOf] },
-                            then: { $divide: [{ $subtract: [asOf, '$dueDate'] }, 1000 * 60 * 60 * 24] },
-                            else: 0
-                        }
-                    },
-                    isOverdue: { $lt: ['$dueDate', asOf] }
-                }
-            },
-            {
                 $project: {
-                    feeNumber: 1,
-                    date: 1,
+                    voucherNumber: 1,
+                    feeMonth: 1,
                     dueDate: 1,
-                    totalAmount: 1,
+                    totalFee: 1,
                     paidAmount: 1,
+                    paymentDiscountTotal: 1,
+                    effectivePaid: 1,
                     balanceDue: 1,
                     status: 1,
                     lateFeeAmount: 1,
-                    cashDiscount: 1,
-                    daysOverdue: { $floor: '$daysOverdue' },
-                    // placeholder - project continues below
                     isOverdue: 1,
+                    daysOverdue: 1,
+                    'student._id': 1,
                     'student.name': 1,
-                    'student.rollNumber': 1,
+                    'student.studentId': 1,
                     'student.contact': 1,
                     'student.email': 1,
-                    paymentCount: { $size: '$payments' }
-                }
+                },
             },
-            { $sort: { dueDate: 1 } }
-        );
+            { $sort: { dueDate: 1 } },
+        ];
 
-        // Use $facet for paginated data + total count in one pass
-        const pendingFacetPipeline = [
-            ...pipeline,
+        // Paginated data + full-dataset summary in parallel.
+        const pageNum = parseInt(page, 10) || 1;
+        const limitNum = parseInt(limit, 10) || 50;
+
+        const dataPipeline = [
+            ...basePipeline,
             {
                 $facet: {
                     data: [
-                        { $skip: (parseInt(page) - 1) * parseInt(limit) },
-                        { $limit: parseInt(limit) }
+                        { $skip: (pageNum - 1) * limitNum },
+                        { $limit: limitNum },
                     ],
-                    totalCount: [{ $count: 'count' }]
-                }
-            }
+                    totalCount: [{ $count: 'count' }],
+                    summary: [
+                        {
+                            $group: {
+                                _id: null,
+                                totalFees: { $sum: { $ifNull: ['$totalFee', 0] } },
+                                totalPaid: { $sum: { $ifNull: ['$paidAmount', 0] } },
+                                totalDiscount: { $sum: { $ifNull: ['$paymentDiscountTotal', 0] } },
+                                totalPending: { $sum: '$balanceDue' },
+                                totalLateFee: { $sum: { $ifNull: ['$lateFeeAmount', 0] } },
+                                overdueCount: {
+                                    $sum: { $cond: ['$isOverdue', 1, 0] },
+                                },
+                                overdueAmount: {
+                                    $sum: { $cond: ['$isOverdue', '$balanceDue', 0] },
+                                },
+                                totalVouchers: { $sum: 1 },
+                            },
+                        },
+                    ],
+                },
+            },
         ];
 
-        const [pendingFacetResult] = await Fee.aggregate(pendingFacetPipeline);
-        const pendingFees = pendingFacetResult?.data || [];
-        const totalCount = pendingFacetResult?.totalCount?.[0]?.count || 0;
+        const [facetResult] = await FeeVoucher.aggregate(dataPipeline);
+        const pendingFees = facetResult?.data || [];
+        const totalCount = facetResult?.totalCount?.[0]?.count || 0;
+        const summaryAgg = facetResult?.summary?.[0] || {};
 
-        // Calculate summary
-        const summary = pendingFees.reduce((acc, fee) => {
-            acc.totalFees += fee.totalAmount || 0;
-            acc.totalPaid += fee.paidAmount || 0;
-            acc.totalPending += fee.balanceDue || 0;
-            acc.totalLateFee += fee.lateFeeAmount || 0;
-            
-            if (fee.isOverdue) {
-                acc.overdueCount += 1;
-                acc.overdueAmount += fee.balanceDue || 0;
-            }
-            
-            return acc;
-        }, {
-            totalFees: 0,
-            totalPaid: 0,
-            totalPending: 0,
-            totalLateFee: 0,
-            overdueCount: 0,
-            overdueAmount: 0
-        });
+        const summary = {
+            totalFees: summaryAgg.totalFees || 0,
+            totalPaid: summaryAgg.totalPaid || 0,
+            totalDiscount: summaryAgg.totalDiscount || 0,
+            totalPending: summaryAgg.totalPending || 0,
+            totalLateFee: summaryAgg.totalLateFee || 0,
+            overdueCount: summaryAgg.overdueCount || 0,
+            overdueAmount: summaryAgg.overdueAmount || 0,
+            totalPendingFees: summaryAgg.totalVouchers || 0,
+            overduePercentage: summaryAgg.totalFees > 0
+                ? (summaryAgg.overdueAmount / summaryAgg.totalFees) * 100
+                : 0,
+        };
 
         const result = {
             pendingFees,
             pagination: {
-                page: parseInt(page),
-                limit: parseInt(limit),
+                page: pageNum,
+                limit: limitNum,
                 total: totalCount,
-                pages: Math.ceil(totalCount / limit)
+                pages: Math.ceil(totalCount / limitNum),
             },
-            summary: {
-                ...summary,
-                totalPendingFees: pendingFees.length,
-                overduePercentage: summary.totalFees > 0 ? (summary.overdueAmount / summary.totalFees) * 100 : 0
-            },
+            summary,
             asOfDate: asOf,
-            filters: {
-                asOfDate,
-                studentId,
-                courseId,
-                batchId,
-                overdueOnly
-            }
+            filters: { asOfDate, studentId, overdueOnly },
         };
 
         setCache(cacheKey, result, 300);
@@ -398,9 +378,9 @@ const getPendingFeesReport = async (req, res) => {
 
     } catch (error) {
         console.error('Error in getPendingFeesReport:', error);
-        res.status(500).json({ 
+        res.status(500).json({
             message: 'Failed to fetch pending fees report',
-            error: error.message 
+            error: error.message,
         });
     }
 };
@@ -408,6 +388,8 @@ const getPendingFeesReport = async (req, res) => {
 // @desc    Get Student Ledger Report
 // @route   GET /api/reports/student-ledger/:companyId/:studentId
 // @access  Private/Admin/Accountant
+// CA-correct: uses FeeVoucher (debits) + FeePayment (credits for cash, and credits for discount/contra-revenue).
+// Running balance = total charged − total (paid + discounted).
 const getStudentLedgerReport = async (req, res) => {
     try {
         const { companyId, studentId } = req.params;
@@ -421,103 +403,120 @@ const getStudentLedgerReport = async (req, res) => {
         const studentObjectId = new mongoose.Types.ObjectId(studentId);
 
         // Get student information
-        const student = await Student.findOne({ 
-            _id: studentObjectId, 
-            company: companyObjectId 
+        const student = await Student.findOne({
+            _id: studentObjectId,
+            company: companyObjectId
         }).populate('courses course').populate('batches batch');
 
         if (!student) {
             return res.status(404).json({ message: 'Student not found' });
         }
 
-        // Get all fees for the student
-        const feeMatch = { 
-            company: companyObjectId, 
-            student: studentObjectId 
+        const dateInRange = (dateField, qStart, qEnd) => {
+            const clause = {};
+            if (qStart) clause.$gte = new Date(qStart);
+            if (qEnd) clause.$lte = new Date(qEnd);
+            return Object.keys(clause).length ? { [dateField]: clause } : {};
         };
 
-        if (startDate && endDate) {
-            feeMatch.date = {
-                $gte: new Date(startDate),
-                $lte: new Date(endDate)
-            };
-        }
+        // Heal vouchers first so statuses/paid amounts are fresh.
+        try {
+            const { healVoucherStatuses } = await import('../services/voucherHealService.js');
+            await healVoucherStatuses(companyId);
+        } catch (_) { /* non-fatal */ }
 
-        const fees = await Fee.find(feeMatch)
-            .populate('voucher')
-            .sort({ date: 1 });
-
-        // Get all payments for the student
-        const paymentMatch = { 
-            company: companyObjectId, 
-            student: studentObjectId 
+        // ── DEBITS: Vouchers generated for the student (invoices) ────────────
+        const voucherMatch = {
+            company: companyObjectId,
+            student: studentObjectId,
+            status: { $ne: 'cancelled' },
+            ...dateInRange('generatedDate', startDate, endDate),
         };
+        const vouchers = await FeeVoucher.find(voucherMatch).sort({ generatedDate: 1 }).lean();
 
-        if (startDate && endDate) {
-            paymentMatch.paymentDate = {
-                $gte: new Date(startDate),
-                $lte: new Date(endDate)
-            };
-        }
-
+        // ── CREDITS: Active payments (cash received) ─────────────────────────
+        const paymentMatch = {
+            company: companyObjectId,
+            student: studentObjectId,
+            status: 'active',
+            ...dateInRange('paymentDate', startDate, endDate),
+        };
         const payments = await FeePayment.find(paymentMatch)
-            .populate('fee', 'feeNumber dueDate')
             .populate('receivedBy', 'name')
-            .sort({ paymentDate: 1 });
+            .sort({ paymentDate: 1 })
+            .lean();
 
-        // Combine and sort transactions
+        // ── Build unified ledger ─────────────────────────────────────────────
         const transactions = [];
 
-        // Add fee transactions (debits)
-        fees.forEach(fee => {
+        vouchers.forEach(v => {
             transactions.push({
-                date: fee.date,
-                type: 'fee',
-                description: `Fee #${fee.feeNumber} - ${fee.items.map(item => item.description).join(', ')}`,
-                reference: fee.feeNumber,
-                debit: fee.totalAmount,
+                date: v.generatedDate,
+                type: 'voucher',
+                description: `Voucher #${v.voucherNumber || v._id} — ${v.feeMonth ? new Date(v.feeMonth).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'Fee'}`,
+                reference: v.voucherNumber,
+                debit: v.totalFee || 0,
                 credit: 0,
-                balance: 0, // Will be calculated
-                status: fee.status,
-                dueDate: fee.dueDate
+                balance: 0,
+                status: v.status,
+                dueDate: v.dueDate,
             });
         });
 
-        // Add payment transactions (credits)
-        payments.forEach(payment => {
+        payments.forEach(p => {
+            // Cash payment credit (reduces receivable)
             transactions.push({
-                date: payment.paymentDate,
+                date: p.paymentDate,
                 type: 'payment',
-                description: `Payment #${payment.paymentNumber} via ${payment.paymentMethod}`,
-                reference: payment.paymentNumber,
+                description: `Payment #${p.paymentNumber} via ${p.paymentMethod}`,
+                reference: p.paymentNumber,
                 debit: 0,
-                credit: payment.amount,
-                balance: 0, // Will be calculated
-                method: payment.paymentMethod,
-                receivedBy: payment.receivedBy?.name
+                credit: p.amount || 0,
+                balance: 0,
+                method: p.paymentMethod,
+                receivedBy: p.receivedBy?.name,
             });
+            // Discount allowed is a contra-revenue credit that also reduces receivable.
+            if (Number(p.discountAmount) > 0) {
+                transactions.push({
+                    date: p.paymentDate,
+                    type: 'discount',
+                    description: `Discount allowed on ${p.paymentNumber}${p.discountReason ? ` — ${p.discountReason}` : ''}`,
+                    reference: p.paymentNumber,
+                    debit: 0,
+                    credit: p.discountAmount,
+                    balance: 0,
+                });
+            }
         });
 
-        // Sort by date and calculate running balance
+        // Sort by date (stable) and compute running balance.
         transactions.sort((a, b) => new Date(a.date) - new Date(b.date));
-        
         let runningBalance = 0;
-        transactions.forEach(transaction => {
-            runningBalance = runningBalance + transaction.debit - transaction.credit;
-            transaction.balance = runningBalance;
+        transactions.forEach(t => {
+            runningBalance += (t.debit || 0) - (t.credit || 0);
+            t.balance = runningBalance;
         });
 
-        // Calculate summary
+        // ── Summary ──────────────────────────────────────────────────────────
+        const totalBilled = vouchers.reduce((s, v) => s + (v.totalFee || 0), 0);
+        const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0);
+        const totalDiscount = payments.reduce((s, p) => s + (p.discountAmount || 0), 0);
+        const totalPending = Math.max(0, totalBilled - totalPaid - totalDiscount);
+
+        const nextDueVoucher = vouchers
+            .filter(v => v.status !== 'paid')
+            .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))[0];
+
         const summary = {
-            totalFees: fees.reduce((sum, fee) => sum + fee.totalAmount, 0),
-            totalPaid: payments.reduce((sum, payment) => sum + payment.amount, 0),
-            totalPending: Math.max(0, fees.reduce((sum, fee) => sum + fee.totalAmount, 0) - payments.reduce((sum, payment) => sum + payment.amount, 0)),
-            feeCount: fees.length,
+            totalFees: totalBilled,          // total invoiced (debits)
+            totalPaid,                        // cash received
+            totalDiscount,                    // discounts allowed
+            totalPending,                     // remaining receivable
+            feeCount: vouchers.length,
             paymentCount: payments.length,
             lastPaymentDate: payments.length > 0 ? payments[payments.length - 1].paymentDate : null,
-            nextDueDate: fees
-                .filter(fee => fee.status === 'unpaid')
-                .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))[0]?.dueDate || null
+            nextDueDate: nextDueVoucher?.dueDate || null,
         };
 
         const result = {
@@ -525,18 +524,19 @@ const getStudentLedgerReport = async (req, res) => {
                 _id: student._id,
                 name: student.name,
                 rollNumber: student.rollNumber,
+                studentId: student.studentId,
                 contact: student.contact,
                 email: student.email,
                 courses: student.courses,
-                batches: student.batches
+                batches: student.batches,
             },
             transactions,
             summary,
             reportPeriod: {
                 startDate,
                 endDate,
-                generatedOn: new Date()
-            }
+                generatedOn: new Date(),
+            },
         };
 
         setCache(cacheKey, result, 300);
@@ -544,9 +544,9 @@ const getStudentLedgerReport = async (req, res) => {
 
     } catch (error) {
         console.error('Error in getStudentLedgerReport:', error);
-        res.status(500).json({ 
+        res.status(500).json({
             message: 'Failed to fetch student ledger report',
-            error: error.message 
+            error: error.message,
         });
     }
 };
@@ -574,7 +574,13 @@ const getSummaryReport = async (req, res) => {
         const end = endDate ? new Date(endDate) : now;
         end.setHours(23, 59, 59, 999);
 
-        // Payment aggregation
+        // Heal vouchers first for accurate pending amounts.
+        try {
+            const { healVoucherStatuses } = await import('../services/voucherHealService.js');
+            await healVoucherStatuses(companyId);
+        } catch (_) { /* non-fatal */ }
+
+        // Payment aggregation (cash collected)
         const paymentPipeline = [
             {
                 $match: {
@@ -588,14 +594,13 @@ const getSummaryReport = async (req, res) => {
                     _id: {
                         year: { $year: '$paymentDate' },
                         month: { $month: '$paymentDate' },
-                        day: groupBy === 'day' ? { $dayOfMonth: '$paymentDate' } : 
+                        day: groupBy === 'day' ? { $dayOfMonth: '$paymentDate' } :
                              groupBy === 'week' ? { $week: '$paymentDate' } : null
                     },
                     totalAmount: { $sum: '$amount' },
-                    totalLateFee: { $sum: '$lateFeeAmount' },
-                    totalDiscount: { $sum: '$discountAmount' },
-                    paymentCount: { $sum: 1 },
-                    payments: { $push: '$$ROOT' }
+                    totalLateFee: { $sum: { $ifNull: ['$lateFeeAmount', 0] } },
+                    totalDiscount: { $sum: { $ifNull: ['$discountAmount', 0] } },
+                    paymentCount: { $sum: 1 }
                 }
             },
             { $sort: { '_id.year': 1, '_id.month': 1, '_id.day': 1 } }
@@ -603,91 +608,81 @@ const getSummaryReport = async (req, res) => {
 
         const paymentSummary = await FeePayment.aggregate(paymentPipeline);
 
-        // Fee generation aggregation
-        const feePipeline = [
+        // Voucher-generation aggregation (fees INVOICED)
+        const voucherPipeline = [
             {
                 $match: {
                     company: companyObjectId,
-                    date: { $gte: start, $lte: end }
+                    generatedDate: { $gte: start, $lte: end },
+                    status: { $ne: 'cancelled' }
                 }
             },
             {
                 $group: {
                     _id: {
-                        year: { $year: '$date' },
-                        month: { $month: '$date' },
-                        day: groupBy === 'day' ? { $dayOfMonth: '$date' } : 
-                             groupBy === 'week' ? { $week: '$date' } : null
+                        year: { $year: '$generatedDate' },
+                        month: { $month: '$generatedDate' },
+                        day: groupBy === 'day' ? { $dayOfMonth: '$generatedDate' } :
+                             groupBy === 'week' ? { $week: '$generatedDate' } : null
                     },
-                    totalFees: { $sum: '$totalAmount' },
-                    feeCount: { $sum: 1 },
-                    fees: { $push: '$$ROOT' }
+                    totalFees: { $sum: { $ifNull: ['$totalFee', 0] } },
+                    feeCount: { $sum: 1 }
                 }
             },
             { $sort: { '_id.year': 1, '_id.month': 1, '_id.day': 1 } }
         ];
 
-        const feeSummary = await Fee.aggregate(feePipeline);
+        const feeSummary = await FeeVoucher.aggregate(voucherPipeline);
 
         // Combine data
         const summaryData = {};
-        
-        // Process payment data
+        const blank = (key) => ({
+            period: key, totalFees: 0, totalCollected: 0, totalLateFee: 0, totalDiscount: 0,
+            netCollection: 0, feeCount: 0, paymentCount: 0, pendingAmount: 0,
+        });
+
+        // Process payment data (cash is `amount` — NOT amount−discount)
         paymentSummary.forEach(item => {
             const key = `${item._id.year}-${item._id.month.toString().padStart(2, '0')}-${item._id.day?.toString().padStart(2, '0') || '01'}`;
-            summaryData[key] = {
-                period: key,
-                totalFees: 0,
-                totalCollected: item.totalAmount,
-                totalLateFee: item.totalLateFee,
-                totalDiscount: item.totalDiscount,
-                netCollection: item.totalAmount - item.totalDiscount,
-                feeCount: 0,
-                paymentCount: item.paymentCount,
-                pendingAmount: 0
-            };
+            const row = summaryData[key] || blank(key);
+            row.totalCollected = item.totalAmount;
+            row.totalLateFee = item.totalLateFee;
+            row.totalDiscount = item.totalDiscount;
+            row.netCollection = item.totalAmount;   // Cash actually received
+            row.paymentCount = item.paymentCount;
+            summaryData[key] = row;
         });
 
         // Process fee data
         feeSummary.forEach(item => {
             const key = `${item._id.year}-${item._id.month.toString().padStart(2, '0')}-${item._id.day?.toString().padStart(2, '0') || '01'}`;
-            if (!summaryData[key]) {
-                summaryData[key] = {
-                    period: key,
-                    totalFees: 0,
-                    totalCollected: 0,
-                    totalLateFee: 0,
-                    totalDiscount: 0,
-                    netCollection: 0,
-                    feeCount: 0,
-                    paymentCount: 0,
-                    pendingAmount: 0
-                };
-            }
-            summaryData[key].totalFees = item.totalFees;
-            summaryData[key].feeCount = item.feeCount;
+            const row = summaryData[key] || blank(key);
+            row.totalFees = item.totalFees;
+            row.feeCount = item.feeCount;
+            summaryData[key] = row;
         });
 
-        // Calculate pending amounts
+        // Pending amount (outstanding receivable) by generation period
         if (includePending === 'true') {
             const pendingMatch = {
                 company: companyObjectId,
-                status: { $in: ['unpaid', 'partial'] },
-                balanceDue: { $gt: 0 }
+                status: { $in: ['pending', 'partial', 'overdue'] },
             };
-
             if (startDate && endDate) {
-                pendingMatch.date = { $gte: start, $lte: end };
+                pendingMatch.generatedDate = { $gte: start, $lte: end };
             }
 
-            const pendingFees = await Fee.find(pendingMatch);
-            
-            pendingFees.forEach(fee => {
-                const feeDate = new Date(fee.date);
-                const key = `${feeDate.getFullYear()}-${(feeDate.getMonth() + 1).toString().padStart(2, '0')}-${feeDate.getDate().toString().padStart(2, '0')}`;
-                if (summaryData[key]) {
-                    summaryData[key].pendingAmount += fee.balanceDue;
-                }
+            const pendingVouchers = await FeeVoucher.find(pendingMatch, {
+                generatedDate: 1, totalFee: 1, paidAmount: 1, paymentDiscountTotal: 1,
+            }).lean();
+
+            pendingVouchers.forEach(v => {
+                const d = new Date(v.generatedDate);
+                const key = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
+                const effectivePaid = (v.paidAmount || 0) + (v.paymentDiscountTotal || 0);
+                const balanceDue = Math.max(0, (v.totalFee || 0) - effectivePaid);
+                if (!summaryData[key]) summaryData[key] = blank(key);
+                summaryData[key].pendingAmount += balanceDue;
             });
         }
 
