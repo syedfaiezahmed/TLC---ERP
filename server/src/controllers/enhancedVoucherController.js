@@ -1,6 +1,7 @@
 import voucherService from '../services/voucherService.js';
 import feeCalculationService from '../services/feeCalculationService.js';
 import FeeVoucher from '../models/FeeVoucher.js';
+import FeePayment from '../models/FeePayment.js';
 import Company from '../models/Company.js';
 import mongoose from 'mongoose';
 import { postJournal } from '../services/journalService.js';
@@ -12,20 +13,61 @@ const resolveCompanyId = (req) => {
 };
 
 /**
- * CA-correct voucher status heal.
- * Recomputes `status` atomically from paidAmount vs totalFee + dueDate:
- *   - paidAmount >= totalFee - 0.5   → 'paid'          (base fully covered; late fee may be waived)
+ * CA-correct voucher heal — in two phases:
+ *
+ * PHASE 1: Rebuild `paidAmount` on each voucher from the sum of its ACTIVE FeePayment
+ *          records. FeePayment is the source of truth; voucher.paidAmount is a cache
+ *          that can drift (e.g. failed saves, race conditions, historical bugs).
+ *
+ * PHASE 2: Recompute `status` from the fresh paidAmount vs totalFee + dueDate:
+ *   - paidAmount >= totalFee - 0.5   → 'paid'     (base covered; late fee may be waived)
  *   - paidAmount > 0 AND past due    → 'overdue'
  *   - paidAmount > 0                 → 'partial'
  *   - paidAmount == 0 AND past due   → 'overdue'
  *   - otherwise                      → 'pending'
- * Preserves 'cancelled'. Also backfills paidDate when a voucher becomes paid.
+ * Preserves 'cancelled'.
  */
 const healVoucherStatuses = async (companyId) => {
   const now = new Date();
   try {
-    await FeeVoucher.updateMany(
-      { company: companyId, status: { $ne: 'cancelled' } },
+    const companyObjId = new mongoose.Types.ObjectId(companyId);
+
+    // ── PHASE 1: Rebuild paidAmount from FeePayment records ────────────────
+    const paymentSums = await FeePayment.aggregate([
+      { $match: { company: companyObjId, status: 'active', voucher: { $ne: null } } },
+      { $group: { _id: '$voucher', totalPaid: { $sum: '$amount' } } },
+    ]);
+
+    const touchedVoucherIds = paymentSums.map((p) => p._id);
+
+    if (paymentSums.length > 0) {
+      const bulkOps = paymentSums.map((p) => ({
+        updateOne: {
+          filter: { _id: p._id, company: companyObjId },
+          update: { $set: { paidAmount: p.totalPaid } },
+        },
+      }));
+      const bulkRes = await FeeVoucher.bulkWrite(bulkOps, { ordered: false });
+      console.log(`[healVoucherStatuses] Phase 1: paidAmount rebuilt for ${bulkRes.modifiedCount || 0} vouchers (from ${paymentSums.length} payment groups)`);
+    }
+
+    // Reset paidAmount = 0 for vouchers that have no active payments at all
+    const resetRes = await FeeVoucher.updateMany(
+      {
+        company: companyObjId,
+        _id: { $nin: touchedVoucherIds },
+        status: { $ne: 'cancelled' },
+        paidAmount: { $gt: 0 },
+      },
+      { $set: { paidAmount: 0 } }
+    );
+    if (resetRes.modifiedCount > 0) {
+      console.log(`[healVoucherStatuses] Phase 1: reset paidAmount=0 on ${resetRes.modifiedCount} orphan vouchers`);
+    }
+
+    // ── PHASE 2: Recompute status from the fresh paidAmount ────────────────
+    const statusRes = await FeeVoucher.updateMany(
+      { company: companyObjId, status: { $ne: 'cancelled' } },
       [
         {
           $set: {
@@ -51,24 +93,23 @@ const healVoucherStatuses = async (companyId) => {
                 default: 'pending',
               },
             },
-            paidDate: {
-              $cond: [
-                {
-                  $and: [
-                    { $gte: [{ $ifNull: ['$paidAmount', 0] }, { $subtract: ['$totalFee', 0.5] }] },
-                    { $not: ['$paidDate'] },
-                  ],
-                },
-                now,
-                '$paidDate',
-              ],
-            },
           },
         },
       ]
     );
+    console.log(`[healVoucherStatuses] Phase 2: status recomputed on ${statusRes.modifiedCount || 0} vouchers`);
+
+    // Backfill paidDate on vouchers that just became paid
+    await FeeVoucher.updateMany(
+      {
+        company: companyObjId,
+        status: 'paid',
+        $or: [{ paidDate: null }, { paidDate: { $exists: false } }],
+      },
+      { $set: { paidDate: now } }
+    );
   } catch (err) {
-    console.error('[healVoucherStatuses] failed (non-fatal):', err.message);
+    console.error('[healVoucherStatuses] FAILED:', err.message, err.stack);
   }
 };
 
