@@ -62,7 +62,8 @@ const authUser = async (req, res) => {
             name: user.name,
             email: user.email,
             role: user.role,
-            company: user.company, // Include company in response
+            company: user.company, // Include company ID in response
+            companyName: company?.name || null, // Include company name so frontend doesn't need extra fetch
             token: token,
         });
     }
@@ -102,12 +103,21 @@ const authUser = async (req, res) => {
     }
 
     if (await user.matchPassword(normalizedPassword)) {
+        // Fetch company name so the frontend doesn't need a separate request
+        let companyName = null;
+        if (user.company) {
+            try {
+                const co = await Company.findById(user.company).select('name').lean();
+                companyName = co?.name || null;
+            } catch (_) { /* non-fatal */ }
+        }
         res.json({
             _id: user._id,
             name: user.name,
             email: user.email,
             role: user.role,
             company: user.company,
+            companyName,
             token: generateToken(user._id),
         });
     } else {

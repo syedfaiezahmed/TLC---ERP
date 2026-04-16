@@ -15,10 +15,9 @@ API.interceptors.request.use((req) => {
 export const signIn = (formData) => API.post('/users/login', formData);
 export const register = (formData) => API.post('/users', formData);
 
-export const fetchCompanies = () => API.get('/companies');
-export const createCompany = (newCompany) => API.post('/companies', newCompany);
+// Single-company mode — only fetch-by-id and update remain.
+export const fetchCompanyById = (id) => API.get(`/companies/${id}`);
 export const updateCompany = (id, updatedCompany) => API.put(`/companies/${id}`, updatedCompany);
-export const deleteCompany = (id) => API.delete(`/companies/${id}`);
 
 export const fetchStudents = (companyId, { page = 1, limit = 20, search = '' } = {}) => {
     let url = `/students/company/${companyId}?page=${page}&limit=${limit}`;

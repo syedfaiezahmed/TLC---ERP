@@ -1,20 +1,17 @@
+// Single-company mode: only GET (Settings/Navbar) and PUT (Settings save) remain.
+// Removed: POST /, GET / (list), DELETE /:id
 import express from 'express';
 import {
-  createCompany,
-  getCompanies,
   getCompanyById,
   updateCompany,
-  deleteCompany,
 } from '../controllers/companyController.js';
-import { protect, admin, superadmin } from '../middleware/authMiddleware.js';
+import { protect, admin } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-router.route('/').post(protect, superadmin, createCompany).get(protect, admin, getCompanies);
 router
   .route('/:id')
   .get(protect, admin, getCompanyById)
-  .put(protect, admin, updateCompany)
-  .delete(protect, superadmin, deleteCompany);
+  .put(protect, admin, updateCompany);
 
 export default router;

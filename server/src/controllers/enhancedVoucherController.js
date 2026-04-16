@@ -7,10 +7,9 @@ import { postJournal } from '../services/journalService.js';
 import { logAudit } from '../services/auditService.js';
 import { healVoucherStatuses, forceHealVoucherStatuses } from '../services/voucherHealService.js';
 
-// Helper: resolve companyId from user or request
-const resolveCompanyId = (req) => {
-  return req.body?.companyId || req.query?.companyId || req.user?.company?.toString() || null;
-};
+// Single-company mode: always use the authenticated user's company.
+// Client-supplied companyId in params/query/body is IGNORED for security.
+const resolveCompanyId = (req) => req.user?.company?.toString() || null;
 
 class VoucherController {
   async generateVouchers(req, res) {

@@ -2,7 +2,7 @@ import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { Routes, Route, useParams } from 'react-router-dom';
 import { Box, Toolbar, CircularProgress } from '@mui/material';
 import { useDispatch, useSelector } from 'react-redux';
-import { selectCompany, getCompanies } from '../redux/companySlice';
+import { fetchCurrentCompany } from '../redux/companySlice';
 
 import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
@@ -57,10 +57,10 @@ const Dashboard = () => {
   const companies = useSelector((state) => state.companies.companies) || [];
   const loading = useSelector((state) => state.companies.loading);
 
-  // Auto-select company from URL - Only if companyId changes
+  // Single-company mode: load the user's own company once from URL param.
   useEffect(() => {
       if (companyId) {
-          dispatch(selectCompany(companyId));
+          dispatch(fetchCurrentCompany(companyId));
       }
   }, [companyId, dispatch]);
 

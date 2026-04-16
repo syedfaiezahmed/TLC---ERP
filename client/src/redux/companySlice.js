@@ -1,89 +1,66 @@
+// Single-company mode: slim slice with only the two thunks actually used by the app.
+//   • fetchCurrentCompany  – loads the logged-in user's company (for Settings / Navbar).
+//   • updateCompany        – persists Settings page changes.
+// Removed (dead code): getCompanies, createCompany, deleteCompany, selectCompany reducer.
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import * as api from '../services/api';
 
-export const getCompanies = createAsyncThunk('companies/getCompanies', async (_, { rejectWithValue }) => {
-  try {
-    const { data } = await api.fetchCompanies();
-    return data;
-  } catch (error) {
-    return rejectWithValue(error.response.data);
+export const fetchCurrentCompany = createAsyncThunk(
+  'companies/fetchCurrentCompany',
+  async (id, { rejectWithValue }) => {
+    try {
+      const { data } = await api.fetchCompanyById(id);
+      return data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data);
+    }
   }
-});
+);
 
-export const createCompany = createAsyncThunk('companies/createCompany', async (company, { rejectWithValue }) => {
-  try {
-    const { data } = await api.createCompany(company);
-    return data;
-  } catch (error) {
-    return rejectWithValue(error.response.data);
+export const updateCompany = createAsyncThunk(
+  'companies/updateCompany',
+  async ({ id, company }, { rejectWithValue }) => {
+    try {
+      const { data } = await api.updateCompany(id, company);
+      return data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data);
+    }
   }
-});
-
-export const updateCompany = createAsyncThunk('companies/updateCompany', async ({ id, company }, { rejectWithValue }) => {
-  try {
-    const { data } = await api.updateCompany(id, company);
-    return data;
-  } catch (error) {
-    return rejectWithValue(error.response.data);
-  }
-});
-
-export const deleteCompany = createAsyncThunk('companies/deleteCompany', async (id, { rejectWithValue }) => {
-  try {
-    await api.deleteCompany(id);
-    return id;
-  } catch (error) {
-    return rejectWithValue(error.response.data);
-  }
-});
+);
 
 const companySlice = createSlice({
   name: 'companies',
   initialState: {
-    companies: [],
     loading: false,
     error: null,
-    selectedCompany: null,
+    selectedCompany: null, // the single active company (user's own)
+    // Kept for backward compatibility with any lingering `useSelector(s => s.companies.companies)`.
+    // Always contains [selectedCompany] when loaded, or [] otherwise.
+    companies: [],
   },
   reducers: {
-    selectCompany: (state, action) => {
-        state.selectedCompany = state.companies.find(c => c._id === action.payload);
-    }
+    // Back-compat no-op: old code dispatched selectCompany(id) from URL params.
+    // In single-company mode we ignore the id — selectedCompany is loaded via fetchCurrentCompany.
+    selectCompany: (state) => state,
   },
   extraReducers: (builder) => {
     builder
-      .addCase(getCompanies.pending, (state) => {
+      .addCase(fetchCurrentCompany.pending, (state) => {
         state.loading = true;
       })
-      .addCase(getCompanies.fulfilled, (state, action) => {
+      .addCase(fetchCurrentCompany.fulfilled, (state, action) => {
         state.loading = false;
-        state.companies = action.payload;
+        state.selectedCompany = action.payload;
+        state.companies = action.payload ? [action.payload] : [];
       })
-      .addCase(getCompanies.rejected, (state, action) => {
+      .addCase(fetchCurrentCompany.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload?.message;
       })
-      .addCase(createCompany.fulfilled, (state, action) => {
-        // Handle SaaS creation response which includes admin details
-        const newCompany = action.payload.company || action.payload;
-        state.companies.push(newCompany);
-        
-        if (action.payload.admin) {
-            // Logic to show admin credentials to superadmin
-            alert(`Company Created!\n\nAdmin Email: ${action.payload.admin.email}\nCompany ID: ${action.payload.admin.companyId}\n\nPlease share these with the client.`);
-        }
-      })
       .addCase(updateCompany.fulfilled, (state, action) => {
-        state.companies = state.companies.map((c) => (c._id === action.payload._id ? action.payload : c));
-        if (state.selectedCompany && state.selectedCompany._id === action.payload._id) {
-            state.selectedCompany = action.payload;
-        }
-      })
-      .addCase(deleteCompany.fulfilled, (state, action) => {
-        state.companies = state.companies.filter((c) => c._id !== action.payload);
-        if (state.selectedCompany?._id === action.payload) {
-            state.selectedCompany = null;
-        }
+        state.selectedCompany = action.payload;
+        state.companies = [action.payload];
       });
   },
 });

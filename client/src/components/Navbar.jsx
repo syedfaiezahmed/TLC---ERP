@@ -19,6 +19,8 @@ const Navbar = React.memo(({ drawerWidth, handleDrawerToggle }) => {
   const theme = useTheme();
   const authData = useSelector((state) => state.auth.authData);
   const selectedCompany = useSelector((state) => state.companies.selectedCompany);
+  // Single-company mode: prefer the fully-loaded company doc, fall back to companyName from login.
+  const companyName = selectedCompany?.name || authData?.companyName || null;
 
   const getInitials = React.useCallback((name) => {
     if (!name) return 'U';
@@ -87,13 +89,13 @@ const Navbar = React.memo(({ drawerWidth, handleDrawerToggle }) => {
               <MenuIcon />
             </IconButton>
             
-            {selectedCompany && (
+            {companyName && (
               <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
                 <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>
                   Current Center
                 </Typography>
                 <Typography variant="subtitle2" fontWeight={700} color="primary.main" sx={{ lineHeight: 1.2 }}>
-                  {selectedCompany.name}
+                  {companyName}
                 </Typography>
               </Box>
             )}
