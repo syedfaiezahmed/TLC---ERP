@@ -306,10 +306,14 @@ class VoucherController {
       for (const stat of statistics) {
         const s = stat._id;
         summary[s] = (summary[s] || 0) + stat.count;
+        if (s === 'cancelled') continue; // exclude written-off vouchers from financial totals
         summary.totalAmount += stat.totalFee || 0;
-        summary.totalPaidAmount += s === 'paid' ? (stat.totalPaid || 0) : 0;
-        if (s === 'pending' || s === 'partial') summary.totalPendingAmount += stat.totalFee || 0;
-        if (s === 'overdue') summary.totalOverdueAmount += stat.totalFee || 0;
+        // Count cash actually collected across ALL statuses (paid + partial + overdue-with-partial)
+        summary.totalPaidAmount += stat.totalPaid || 0;
+        // Pending/overdue amounts are NET balances (totalFee - paidAmount)
+        const netDue = Math.max(0, (stat.totalFee || 0) - (stat.totalPaid || 0));
+        if (s === 'pending' || s === 'partial') summary.totalPendingAmount += netDue;
+        if (s === 'overdue') summary.totalOverdueAmount += netDue;
       }
 
       res.json({ success: true, statistics: summary });
