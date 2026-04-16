@@ -165,6 +165,7 @@ export const fetchVoucherForPrint = (id) => API.get(`/enhanced-vouchers/${id}/pr
 export const updateVoucherStatus = (id, data) => API.patch(`/enhanced-vouchers/${id}/status`, data);
 export const deleteVoucher = (id) => API.delete(`/enhanced-vouchers/${id}`);
 export const fetchVoucherStatistics = (params) => API.get('/enhanced-vouchers/statistics', { params });
+export const healVouchers = (companyId) => API.post('/enhanced-vouchers/heal', {}, { params: { companyId } });
 
 // ─── Fee Collection ───────────────────────────────────────────────────────────
 export const collectFeePayment = (data) => API.post('/fee-collection/collect', data);

@@ -2,6 +2,11 @@ import mongoose from 'mongoose';
 import FeeVoucher from '../models/FeeVoucher.js';
 import FeePayment from '../models/FeePayment.js';
 
+// ── Throttle map: skip heal if the same company was healed recently ─────────
+// Prevents heal-storm when user hammers refresh or when list+stats both fire.
+const lastHealAt = new Map(); // companyId (string) → timestamp (ms)
+const THROTTLE_MS = 15 * 1000; // 15 seconds
+
 /**
  * CA-correct voucher heal — in two phases.
  *
@@ -19,14 +24,35 @@ import FeePayment from '../models/FeePayment.js';
  * Preserves 'cancelled' (used for bad-debt write-offs).
  * Backfills paidDate on vouchers that become paid.
  *
- * Call this:
- *   • at the top of voucher-list / voucher-stats endpoints
- *   • after any payment creation / deletion / refund
- *   • after bulk operations that may leave voucher state stale
- *
  * @param {string|ObjectId} companyId
+ * @param {{ force?: boolean }} [opts] — force=true bypasses the throttle
  */
-export const healVoucherStatuses = async (companyId) => {
+export const healVoucherStatuses = async (companyId, opts = {}) => {
+  const cidKey = String(companyId);
+
+  // Throttle — skip if healed recently (unless forced by cron/admin/mutation)
+  if (!opts.force) {
+    const last = lastHealAt.get(cidKey);
+    if (last && Date.now() - last < THROTTLE_MS) {
+      return { ok: true, skipped: true, reason: 'throttled' };
+    }
+  }
+  lastHealAt.set(cidKey, Date.now());
+
+  return _doHeal(companyId);
+};
+
+/**
+ * Force a heal regardless of throttle. Use for cron jobs, admin repair button,
+ * and after any mutation (collect/refund/delete) that MUST immediately show
+ * correct state to the user.
+ */
+export const forceHealVoucherStatuses = async (companyId) => {
+  lastHealAt.set(String(companyId), Date.now());
+  return _doHeal(companyId);
+};
+
+const _doHeal = async (companyId) => {
   const now = new Date();
   try {
     const companyObjId = new mongoose.Types.ObjectId(companyId);
@@ -119,3 +145,4 @@ export const healVoucherStatuses = async (companyId) => {
 };
 
 export default healVoucherStatuses;
+export { _doHeal as __internalDoHealForTesting };

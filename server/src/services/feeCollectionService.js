@@ -2,7 +2,7 @@ import FeePayment from '../models/FeePayment.js';
 import Fee from '../models/Fee.js';
 import FeeVoucher from '../models/FeeVoucher.js';
 import { postFeeCollectionJournal, postFeePaymentRefundJournal } from './journalService.js';
-import { healVoucherStatuses } from './voucherHealService.js';
+import { forceHealVoucherStatuses } from './voucherHealService.js';
 
 class FeeCollectionService {
   async collectFeePayment(paymentData, companyId, userId) {
@@ -363,7 +363,7 @@ class FeeCollectionService {
       // Update voucher
       if (payment.voucher) {
         // Recompute voucher.paidAmount + status from remaining ACTIVE payments
-        await healVoucherStatuses(companyId);
+        await forceHealVoucherStatuses(companyId);
       }
 
       return {

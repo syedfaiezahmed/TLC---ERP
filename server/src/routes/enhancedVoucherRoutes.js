@@ -19,6 +19,9 @@ router.get('/', enhancedVoucherController.getVouchersWithFilters);
 // Get voucher statistics
 router.get('/statistics', enhancedVoucherController.getVoucherStatistics);
 
+// Admin manual repair — force full heal of voucher statuses (bypasses throttle)
+router.post('/heal', authorize('admin', 'accountant', 'superadmin'), enhancedVoucherController.forceHeal);
+
 // Get specific voucher details
 router.get('/:id', enhancedVoucherController.getVoucherDetails);
 

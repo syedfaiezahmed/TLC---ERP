@@ -5,7 +5,7 @@ import Company from '../models/Company.js';
 import mongoose from 'mongoose';
 import { postJournal } from '../services/journalService.js';
 import { logAudit } from '../services/auditService.js';
-import { healVoucherStatuses } from '../services/voucherHealService.js';
+import { healVoucherStatuses, forceHealVoucherStatuses } from '../services/voucherHealService.js';
 
 // Helper: resolve companyId from user or request
 const resolveCompanyId = (req) => {
@@ -320,6 +320,26 @@ class VoucherController {
     } catch (error) {
       console.error('Error fetching voucher statistics:', error);
       res.status(500).json({ success: false, message: 'Failed to fetch voucher statistics', error: error.message });
+    }
+  }
+
+  // Admin manual repair — force heal bypassing throttle
+  async forceHeal(req, res) {
+    try {
+      const companyId = resolveCompanyId(req);
+      if (!companyId) return res.status(400).json({ success: false, message: 'Company ID is required' });
+
+      const result = await forceHealVoucherStatuses(companyId);
+      return res.json({
+        success: !!result.ok,
+        message: result.ok
+          ? `Heal complete: scanned ${result.scanned || 0} vouchers, updated ${result.statusChanges || 0} statuses.`
+          : `Heal failed: ${result.error || 'unknown error'}`,
+        result,
+      });
+    } catch (err) {
+      console.error('[forceHeal] error:', err);
+      res.status(500).json({ success: false, message: err.message });
     }
   }
 

@@ -147,6 +147,8 @@ feePaymentSchema.index({ company: 1, fee: 1 });
 feePaymentSchema.index({ company: 1, paymentDate: 1 });
 feePaymentSchema.index({ company: 1, status: 1 });
 feePaymentSchema.index({ company: 1, receivedBy: 1 });
+// Optimizes the voucher-heal aggregation (SUM amount per voucher WHERE status='active')
+feePaymentSchema.index({ company: 1, status: 1, voucher: 1 });
 
 const FeePayment = mongoose.model('FeePayment', feePaymentSchema);
 

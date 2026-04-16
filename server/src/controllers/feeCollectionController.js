@@ -7,7 +7,7 @@ import mongoose from 'mongoose';
 import { postFeeCollectionJournal } from '../services/journalService.js';
 import { logAudit } from '../services/auditService.js';
 import { recalculateLedger } from '../services/ledgerService.js';
-import { healVoucherStatuses } from '../services/voucherHealService.js';
+import { healVoucherStatuses, forceHealVoucherStatuses } from '../services/voucherHealService.js';
 
 // Helper: resolve companyId from user or request
 const resolveCompanyId = (req) => {
@@ -46,7 +46,7 @@ class FeeCollectionController {
       );
 
       // Defense-in-depth: guarantee voucher state is consistent after every collection
-      await healVoucherStatuses(companyId);
+      await forceHealVoucherStatuses(companyId);
 
       res.json({
         success: true,
@@ -431,7 +431,7 @@ class FeeCollectionController {
       await Ledger.deleteMany({ company: companyId, referenceType: 'fee_collection', referenceId: payment._id });
 
       // Recompute voucher.paidAmount & status from remaining active payments
-      await healVoucherStatuses(companyId);
+      await forceHealVoucherStatuses(companyId);
 
       // Recalculate ledger accounts
       const cashAcc = (payment.paymentMethod && payment.paymentMethod !== 'Cash') ? 'Bank' : 'Cash';

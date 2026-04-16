@@ -647,6 +647,27 @@ const FeeManagement = () => {
                 <Grid item xs="auto" sx={{ ml: 'auto', display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                   <Button variant="outlined" startIcon={<RefreshIcon />} onClick={loadVouchers}
                     disabled={loading.vouchers}>Refresh</Button>
+                  <Button
+                    variant="outlined"
+                    color="warning"
+                    onClick={async () => {
+                      try {
+                        const { healVouchers } = await import('../services/api');
+                        const res = await healVouchers(cid);
+                        const msg = res?.data?.message || 'Heal complete.';
+                        // eslint-disable-next-line no-alert
+                        window.alert('✓ ' + msg);
+                        loadVouchers();
+                        dispatch(fetchVoucherStatistics({ companyId: cid }));
+                      } catch (e) {
+                        dispatch(setError({ key: 'generate', message: e.response?.data?.message || 'Repair failed' }));
+                      }
+                    }}
+                    sx={{ textTransform: 'none' }}
+                    title="Recompute paidAmount & status for all vouchers from FeePayment records"
+                  >
+                    Repair Statuses
+                  </Button>
                   {vouchers.length > 0 && (
                     <Button variant="outlined" color="secondary" startIcon={<DownloadIcon />}
                       onClick={handleExportAllPDF} sx={{ textTransform: 'none' }}>
