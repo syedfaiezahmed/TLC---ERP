@@ -1029,20 +1029,21 @@ const FeeManagement = () => {
                       <Table size="small">
                         <TableHead sx={{ bgcolor: 'background.default' }}>
                           <TableRow>
-                            {['Fee #', 'Student', 'Roll #', 'Due Date', 'Total', 'Paid', 'Balance', 'Days Overdue', 'Status'].map(h => (
-                              <TableCell key={h} sx={{ fontWeight: 700 }} align={['Total', 'Paid', 'Balance', 'Days Overdue'].includes(h) ? 'right' : 'left'}>{h}</TableCell>
+                            {['Voucher #', 'Student', 'Student ID', 'Due Date', 'Total Fee', 'Paid', 'Discount', 'Balance', 'Days Overdue', 'Status'].map(h => (
+                              <TableCell key={h} sx={{ fontWeight: 700 }} align={['Total Fee', 'Paid', 'Discount', 'Balance', 'Days Overdue'].includes(h) ? 'right' : 'left'}>{h}</TableCell>
                             ))}
                           </TableRow>
                         </TableHead>
                         <TableBody>
                           {pendingFeesReport.pendingFees?.map(f => (
                             <TableRow key={f._id} hover>
-                              <TableCell><Typography variant="body2" fontWeight={600}>{f.feeNumber}</Typography></TableCell>
+                              <TableCell><Typography variant="body2" fontWeight={600}>{f.voucherNumber || f.feeNumber}</Typography></TableCell>
                               <TableCell>{f.student?.name}</TableCell>
-                              <TableCell>{f.student?.rollNumber || '-'}</TableCell>
+                              <TableCell>{f.student?.studentId || f.student?.rollNumber || '-'}</TableCell>
                               <TableCell sx={{ color: f.daysOverdue > 0 ? 'error.main' : 'text.primary' }}>{moment(f.dueDate).format('DD-MM-YYYY')}</TableCell>
-                              <TableCell align="right">{fmt(f.totalAmount)}</TableCell>
+                              <TableCell align="right">{fmt(f.totalFee || f.totalAmount)}</TableCell>
                               <TableCell align="right" sx={{ color: 'success.main' }}>{fmt(f.paidAmount)}</TableCell>
+                              <TableCell align="right" sx={{ color: 'info.main' }}>{fmt(f.paymentDiscountTotal || 0)}</TableCell>
                               <TableCell align="right" sx={{ fontWeight: 700, color: 'error.main' }}>{fmt(f.balanceDue)}</TableCell>
                               <TableCell align="right">
                                 <Chip label={f.daysOverdue > 0 ? `${f.daysOverdue}d` : 'Current'}
@@ -1053,7 +1054,7 @@ const FeeManagement = () => {
                             </TableRow>
                           ))}
                           {!pendingFeesReport.pendingFees?.length && (
-                            <TableRow><TableCell colSpan={9} align="center" sx={{ py: 4 }}>No pending fees found.</TableCell></TableRow>
+                            <TableRow><TableCell colSpan={10} align="center" sx={{ py: 4 }}>No pending vouchers found.</TableCell></TableRow>
                           )}
                         </TableBody>
                       </Table>
@@ -1094,14 +1095,14 @@ const FeeManagement = () => {
                           </TableRow>
                         </TableHead>
                         <TableBody>
-                          {studentLedgerReport.transactions?.map(t => (
-                            <TableRow key={t._id} hover>
+                          {studentLedgerReport.transactions?.map((t, idx) => (
+                            <TableRow key={`${t.reference || 'tx'}-${idx}`} hover>
                               <TableCell>{moment(t.date).format('DD-MM-YYYY')}</TableCell>
                               <TableCell>{t.description}</TableCell>
                               <TableCell>{t.reference || '-'}</TableCell>
                               <TableCell align="right">{t.debit > 0 ? <Typography variant="body2" color="error.main" fontWeight={600}>{fmt(t.debit)}</Typography> : '-'}</TableCell>
-                              <TableCell align="right">{t.credit > 0 ? <Typography variant="body2" color="success.main" fontWeight={600}>{fmt(t.credit)}</Typography> : '-'}</TableCell>
-                              <TableCell align="right"><Typography variant="body2" fontWeight={700}>{fmt(t.runningBalance)}</Typography></TableCell>
+                              <TableCell align="right">{t.credit > 0 ? <Typography variant="body2" color={t.type === 'discount' ? 'info.main' : 'success.main'} fontWeight={600}>{fmt(t.credit)}</Typography> : '-'}</TableCell>
+                              <TableCell align="right"><Typography variant="body2" fontWeight={700}>{fmt(t.balance ?? t.runningBalance)}</Typography></TableCell>
                             </TableRow>
                           ))}
                           {!studentLedgerReport.transactions?.length && (
