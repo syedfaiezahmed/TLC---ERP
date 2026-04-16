@@ -1,7 +1,6 @@
 import voucherService from '../services/voucherService.js';
 import feeCalculationService from '../services/feeCalculationService.js';
 import FeeVoucher from '../models/FeeVoucher.js';
-import FeePayment from '../models/FeePayment.js';
 import Company from '../models/Company.js';
 import mongoose from 'mongoose';
 import { postJournal } from '../services/journalService.js';
