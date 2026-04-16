@@ -64,51 +64,54 @@ export const healVoucherStatuses = async (companyId) => {
       console.log(`[healVoucherStatuses] Phase 1: reset paidAmount=0 on ${resetRes.modifiedCount} orphan vouchers`);
     }
 
-    // ── PHASE 2: Recompute status from the fresh paidAmount ────────────────
-    const statusRes = await FeeVoucher.updateMany(
+    // ── PHASE 2: Recompute status via iterative bulkWrite ─────────────────
+    // (Plain JS logic — guaranteed to work on any MongoDB version, no aggregation quirks.)
+    const vouchers = await FeeVoucher.find(
       { company: companyObjId, status: { $ne: 'cancelled' } },
-      [
-        {
-          $set: {
-            status: {
-              $switch: {
-                branches: [
-                  {
-                    case: { $gte: [{ $ifNull: ['$paidAmount', 0] }, { $subtract: ['$totalFee', 0.5] }] },
-                    then: 'paid',
-                  },
-                  {
-                    case: {
-                      $and: [
-                        { $gt: [{ $ifNull: ['$paidAmount', 0] }, 0] },
-                        { $lt: ['$dueDate', now] },
-                      ],
-                    },
-                    then: 'overdue',
-                  },
-                  { case: { $gt: [{ $ifNull: ['$paidAmount', 0] }, 0] }, then: 'partial' },
-                  { case: { $lt: ['$dueDate', now] }, then: 'overdue' },
-                ],
-                default: 'pending',
-              },
-            },
+      { _id: 1, status: 1, paidAmount: 1, totalFee: 1, dueDate: 1, paidDate: 1 }
+    ).lean();
+
+    const statusBulkOps = [];
+    let paidCount = 0, partialCount = 0, overdueCount = 0, pendingCount = 0;
+
+    for (const v of vouchers) {
+      const paidAmount = Number(v.paidAmount) || 0;
+      const totalFee = Number(v.totalFee) || 0;
+      const dueDate = v.dueDate ? new Date(v.dueDate) : null;
+      const isPastDue = dueDate && dueDate < now;
+
+      let newStatus;
+      if (paidAmount >= totalFee - 0.5) newStatus = 'paid';
+      else if (paidAmount > 0 && isPastDue) newStatus = 'overdue';
+      else if (paidAmount > 0) newStatus = 'partial';
+      else if (isPastDue) newStatus = 'overdue';
+      else newStatus = 'pending';
+
+      if (newStatus === 'paid') paidCount++;
+      else if (newStatus === 'partial') partialCount++;
+      else if (newStatus === 'overdue') overdueCount++;
+      else pendingCount++;
+
+      if (newStatus !== v.status || (newStatus === 'paid' && !v.paidDate)) {
+        const update = { status: newStatus };
+        if (newStatus === 'paid' && !v.paidDate) update.paidDate = now;
+        statusBulkOps.push({
+          updateOne: {
+            filter: { _id: v._id },
+            update: { $set: update },
           },
-        },
-      ]
-    );
-    console.log(`[healVoucherStatuses] Phase 2: status recomputed on ${statusRes.modifiedCount || 0} vouchers`);
+        });
+      }
+    }
 
-    // Backfill paidDate on vouchers that just became paid
-    await FeeVoucher.updateMany(
-      {
-        company: companyObjId,
-        status: 'paid',
-        $or: [{ paidDate: null }, { paidDate: { $exists: false } }],
-      },
-      { $set: { paidDate: now } }
-    );
+    if (statusBulkOps.length > 0) {
+      const statusRes = await FeeVoucher.bulkWrite(statusBulkOps, { ordered: false });
+      console.log(`[healVoucherStatuses] Phase 2: ${statusRes.modifiedCount} vouchers changed status (scanned ${vouchers.length}: paid=${paidCount}, partial=${partialCount}, overdue=${overdueCount}, pending=${pendingCount})`);
+    } else {
+      console.log(`[healVoucherStatuses] Phase 2: no status changes needed (scanned ${vouchers.length})`);
+    }
 
-    return { ok: true };
+    return { ok: true, scanned: vouchers.length, statusChanges: statusBulkOps.length };
   } catch (err) {
     console.error('[healVoucherStatuses] FAILED:', err.message, err.stack);
     return { ok: false, error: err.message };
