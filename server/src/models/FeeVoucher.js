@@ -35,6 +35,16 @@ const feeVoucherSchema = mongoose.Schema(
       type: Number,
       required: true,
     },
+    totalOriginalFee: {
+      type: Number,
+      default: 0,
+      description: 'Sum of all enrollment monthlyFees BEFORE discount (gross)',
+    },
+    totalDiscount: {
+      type: Number,
+      default: 0,
+      description: 'Sum of all enrollment discounts applied',
+    },
     baseFee: {
       type: Number,
       description: 'Total without admission fee',
@@ -96,9 +106,15 @@ const feeVoucherSchema = mongoose.Schema(
   }
 );
 
-// Calculate total with late fee before saving
+// Calculate totals before saving
 feeVoucherSchema.pre('save', function () {
   this.totalWithLateFee = this.totalFee + (this.lateFeeAmount || 0);
+  // Roll up line-item discount data to voucher-level for quick display.
+  if (Array.isArray(this.enrollments) && this.enrollments.length) {
+    this.totalOriginalFee = this.enrollments.reduce((s, e) => s + (e.monthlyFee || 0), 0)
+      + (this.admissionFee || 0);
+    this.totalDiscount = this.enrollments.reduce((s, e) => s + (e.discount || 0), 0);
+  }
 });
 
 // Method to check if voucher is overdue

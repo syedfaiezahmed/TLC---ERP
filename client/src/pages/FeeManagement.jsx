@@ -140,28 +140,49 @@ const VoucherCopyBlock = ({ voucher, company, copyType }) => {
         ))}
       </div>
 
-      {/* ── Fee Table ── */}
-      <div style={{ border: '1px solid #ddd', borderRadius: 3, overflow: 'hidden', marginBottom: 7, flex: 1 }}>
-        <div style={{ background: accentColor, display: 'grid', gridTemplateColumns: '1fr 56px 56px', padding: '3px 8px' }}>
-          {['Course', 'Fee', 'Net'].map(h => (
-            <div key={h} style={{ color: 'white', fontWeight: 700, fontSize: 8, textAlign: h === 'Course' ? 'left' : 'right' }}>{h}</div>
-          ))}
-        </div>
-        {(voucher.enrollments || []).map((e, i) => (
-          <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 56px 56px', padding: '3px 8px', background: i % 2 === 0 ? '#fff' : '#f9fafe', borderTop: '1px solid #eee' }}>
-            <div style={{ fontSize: 8.5, color: '#333' }}>{e.courseName}</div>
-            <div style={{ fontSize: 8.5, textAlign: 'right', color: '#555' }}>{fmt(e.monthlyFee)}</div>
-            <div style={{ fontSize: 8.5, textAlign: 'right', fontWeight: 700 }}>{fmt(e.netFee)}</div>
+      {/* ── Fee Table (Course | Fee | Discount | Net) ── */}
+      {(() => {
+        const cols = '1fr 48px 48px 48px';
+        const totalOriginal = voucher.totalOriginalFee
+          || ((voucher.enrollments || []).reduce((s, e) => s + (e.monthlyFee || 0), 0) + (voucher.admissionFee || 0));
+        const totalDiscount = voucher.totalDiscount
+          || (voucher.enrollments || []).reduce((s, e) => s + (e.discount || 0), 0);
+        return (
+          <div style={{ border: '1px solid #ddd', borderRadius: 3, overflow: 'hidden', marginBottom: 7, flex: 1 }}>
+            <div style={{ background: accentColor, display: 'grid', gridTemplateColumns: cols, padding: '3px 8px' }}>
+              {['Course', 'Fee', 'Disc', 'Net'].map(h => (
+                <div key={h} style={{ color: 'white', fontWeight: 700, fontSize: 8, textAlign: h === 'Course' ? 'left' : 'right' }}>{h}</div>
+              ))}
+            </div>
+            {(voucher.enrollments || []).map((e, i) => (
+              <div key={i} style={{ display: 'grid', gridTemplateColumns: cols, padding: '3px 8px', background: i % 2 === 0 ? '#fff' : '#f9fafe', borderTop: '1px solid #eee' }}>
+                <div style={{ fontSize: 8.5, color: '#333' }}>{e.courseName}</div>
+                <div style={{ fontSize: 8.5, textAlign: 'right', color: '#555' }}>{fmt(e.monthlyFee)}</div>
+                <div style={{ fontSize: 8.5, textAlign: 'right', color: e.discount > 0 ? '#c62828' : '#aaa' }}>
+                  {e.discount > 0 ? `-${fmt(e.discount)}` : '—'}
+                </div>
+                <div style={{ fontSize: 8.5, textAlign: 'right', fontWeight: 700 }}>{fmt(e.netFee)}</div>
+              </div>
+            ))}
+            {voucher.admissionFee > 0 && (
+              <div style={{ display: 'grid', gridTemplateColumns: cols, padding: '3px 8px', background: '#FFF8E1', borderTop: '1px solid #eee' }}>
+                <div style={{ fontSize: 8.5, color: '#E65100', fontWeight: 600 }}>Admission Fee</div>
+                <div style={{ fontSize: 8.5, textAlign: 'right', color: '#E65100' }}>{fmt(voucher.admissionFee)}</div>
+                <div style={{ fontSize: 8.5, textAlign: 'right', color: '#aaa' }}>—</div>
+                <div style={{ fontSize: 8.5, textAlign: 'right', fontWeight: 700, color: '#E65100' }}>{fmt(voucher.admissionFee)}</div>
+              </div>
+            )}
+            {totalDiscount > 0 && (
+              <div style={{ display: 'grid', gridTemplateColumns: cols, padding: '3px 8px', background: '#F5F5F5', borderTop: '1.5px solid #bbb', fontWeight: 800 }}>
+                <div style={{ fontSize: 8.5, color: '#000' }}>TOTAL</div>
+                <div style={{ fontSize: 8.5, textAlign: 'right', color: '#000' }}>{fmt(totalOriginal)}</div>
+                <div style={{ fontSize: 8.5, textAlign: 'right', color: '#c62828' }}>-{fmt(totalDiscount)}</div>
+                <div style={{ fontSize: 9, textAlign: 'right', color: accentColor }}>{fmt(voucher.totalFee)}</div>
+              </div>
+            )}
           </div>
-        ))}
-        {voucher.admissionFee > 0 && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 56px 56px', padding: '3px 8px', background: '#FFF8E1', borderTop: '1px solid #eee' }}>
-            <div style={{ fontSize: 8.5, color: '#E65100', fontWeight: 600 }}>Admission Fee</div>
-            <div style={{ fontSize: 8.5, textAlign: 'right', color: '#E65100' }}>{fmt(voucher.admissionFee)}</div>
-            <div style={{ fontSize: 8.5, textAlign: 'right', fontWeight: 700, color: '#E65100' }}>{fmt(voucher.admissionFee)}</div>
-          </div>
-        )}
-      </div>
+        );
+      })()}
 
       {/* ── Totals ── */}
       <div style={{ background: '#E8F5E9', borderRadius: 3, padding: '5px 8px', marginBottom: 6, border: `1px solid ${accentColor}22` }}>
@@ -441,16 +462,16 @@ const FeeManagement = () => {
 
   const handlePaymentTypeChange = (type, voucherData) => {
     if (!voucherData) return;
-    const today = moment();
-    const dueDate = moment(voucherData.dueDate);
-    const isOverdue = today.isAfter(dueDate, 'day');
+    const paid = voucherData.paidAmount || 0;
     let amount = '';
     let lateFeeIncluded = false;
     if (type === 'full_with_late') {
-      amount = voucherData.totalWithLateFee || voucherData.totalFee;
+      // Collect the remaining base + late fee
+      amount = Math.max(0, (voucherData.totalWithLateFee || voucherData.totalFee) - paid);
       lateFeeIncluded = true;
     } else if (type === 'base_only') {
-      amount = voucherData.totalFee;
+      // Collect only remaining base fee — late fee is WAIVED (not recorded as revenue)
+      amount = Math.max(0, voucherData.totalFee - paid);
       lateFeeIncluded = false;
     }
     setPaymentForm(p => ({ ...p, paymentType: type, amount, lateFeeIncluded }));
@@ -527,10 +548,16 @@ const FeeManagement = () => {
     const isOverdue = today.isAfter(due, 'day');
     const daysOverdue = isOverdue ? today.diff(due, 'days') : 0;
     const paid = selectedVoucher.paidAmount || 0;
-    const balance = (isOverdue ? selectedVoucher.totalWithLateFee : selectedVoucher.totalFee) - paid;
-    return { isOverdue, daysOverdue, paid, balance,
+    // Balance reflects current late-fee choice: if admin waives late fee, balance is base only.
+    const applicable = (isOverdue && paymentForm.lateFeeIncluded)
+      ? selectedVoucher.totalWithLateFee
+      : selectedVoucher.totalFee;
+    const balance = Math.max(0, applicable - paid);
+    return { isOverdue, daysOverdue, paid, balance, applicable,
       baseFee: selectedVoucher.totalFee, lateFee: selectedVoucher.lateFeeAmount,
-      totalWithLate: selectedVoucher.totalWithLateFee };
+      totalWithLate: selectedVoucher.totalWithLateFee,
+      totalOriginalFee: selectedVoucher.totalOriginalFee || 0,
+      totalDiscount: selectedVoucher.totalDiscount || 0 };
   })() : null;
 
   // ─── Render ─────────────────────────────────────────────────────────────────
@@ -1260,22 +1287,49 @@ const FeeManagement = () => {
                 </Grid>
               </Box>
 
+              {/* Fee Breakdown (Original → Discount → Net) */}
+              {voucherAmountInfo.totalDiscount > 0 && (
+                <Box sx={{ p: 1.5, mb: 1.5, bgcolor: alpha(theme.palette.info.main, 0.06), borderRadius: 2, border: '1px dashed', borderColor: 'info.main' }}>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center">
+                    <Typography variant="caption" color="text.secondary">Original Fee</Typography>
+                    <Typography variant="body2" fontWeight={600}>{fmt(voucherAmountInfo.totalOriginalFee)}</Typography>
+                  </Stack>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center">
+                    <Typography variant="caption" color="error.main">Discount Applied</Typography>
+                    <Typography variant="body2" fontWeight={600} color="error.main">- {fmt(voucherAmountInfo.totalDiscount)}</Typography>
+                  </Stack>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ borderTop: '1px solid', borderColor: 'divider', pt: 0.5, mt: 0.5 }}>
+                    <Typography variant="caption" fontWeight={700}>Net Fee (Base)</Typography>
+                    <Typography variant="body2" fontWeight={800} color="primary.main">{fmt(voucherAmountInfo.baseFee)}</Typography>
+                  </Stack>
+                </Box>
+              )}
+
+              {/* Already-Paid Info */}
+              {voucherAmountInfo.paid > 0 && (
+                <Alert severity="info" sx={{ mb: 1.5, py: 0.5 }}>
+                  <Typography variant="caption">Already paid: <strong>{fmt(voucherAmountInfo.paid)}</strong> — remaining balance shown below.</Typography>
+                </Alert>
+              )}
+
               {/* Amount Selection */}
               <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.5 }}>Select Payment Amount</Typography>
               <Stack spacing={1.5} sx={{ mb: 2 }}>
-                <Paper
-                  variant={paymentForm.paymentType === 'full_with_late' ? 'elevation' : 'outlined'}
-                  elevation={paymentForm.paymentType === 'full_with_late' ? 4 : 0}
-                  sx={{ p: 2, cursor: 'pointer', borderRadius: 2, border: paymentForm.paymentType === 'full_with_late' ? `2px solid ${theme.palette.primary.main}` : '1px solid', borderColor: paymentForm.paymentType === 'full_with_late' ? 'primary.main' : 'divider' }}
-                  onClick={() => handlePaymentTypeChange('full_with_late', selectedVoucher)}>
-                  <Stack direction="row" justifyContent="space-between" alignItems="center">
-                    <Box>
-                      <Typography variant="body2" fontWeight={700}>Full Amount (with Late Fee)</Typography>
-                      <Typography variant="caption" color="text.secondary">Base {fmt(voucherAmountInfo.baseFee)} + Late Fee {fmt(voucherAmountInfo.lateFee)}</Typography>
-                    </Box>
-                    <Typography variant="h6" fontWeight={800} color="error.main">{fmt(voucherAmountInfo.totalWithLate)}</Typography>
-                  </Stack>
-                </Paper>
+                {voucherAmountInfo.isOverdue && (
+                  <Paper
+                    variant={paymentForm.paymentType === 'full_with_late' ? 'elevation' : 'outlined'}
+                    elevation={paymentForm.paymentType === 'full_with_late' ? 4 : 0}
+                    sx={{ p: 2, cursor: 'pointer', borderRadius: 2, border: paymentForm.paymentType === 'full_with_late' ? `2px solid ${theme.palette.primary.main}` : '1px solid', borderColor: paymentForm.paymentType === 'full_with_late' ? 'primary.main' : 'divider' }}
+                    onClick={() => handlePaymentTypeChange('full_with_late', selectedVoucher)}>
+                    <Stack direction="row" justifyContent="space-between" alignItems="center">
+                      <Box>
+                        <Typography variant="body2" fontWeight={700}>Full Amount (with Late Fee)</Typography>
+                        <Typography variant="caption" color="text.secondary">Base {fmt(voucherAmountInfo.baseFee)} + Late Fee {fmt(voucherAmountInfo.lateFee)}</Typography>
+                      </Box>
+                      <Typography variant="h6" fontWeight={800} color="error.main">{fmt(Math.max(0, voucherAmountInfo.totalWithLate - voucherAmountInfo.paid))}</Typography>
+                    </Stack>
+                  </Paper>
+                )}
 
                 <Paper
                   variant={paymentForm.paymentType === 'base_only' ? 'elevation' : 'outlined'}
@@ -1284,10 +1338,10 @@ const FeeManagement = () => {
                   onClick={() => handlePaymentTypeChange('base_only', selectedVoucher)}>
                   <Stack direction="row" justifyContent="space-between" alignItems="center">
                     <Box>
-                      <Typography variant="body2" fontWeight={700}>Base Fee Only</Typography>
-                      <Typography variant="caption" color="text.secondary">Admin override — waive late fee</Typography>
+                      <Typography variant="body2" fontWeight={700}>{voucherAmountInfo.isOverdue ? 'Base Fee Only (Waive Late Fee)' : 'Full Base Fee'}</Typography>
+                      <Typography variant="caption" color="text.secondary">{voucherAmountInfo.isOverdue ? 'Late fee waived — not recorded as revenue' : 'Pay the net fee on time'}</Typography>
                     </Box>
-                    <Typography variant="h6" fontWeight={800} color="success.main">{fmt(voucherAmountInfo.baseFee)}</Typography>
+                    <Typography variant="h6" fontWeight={800} color="success.main">{fmt(Math.max(0, voucherAmountInfo.baseFee - voucherAmountInfo.paid))}</Typography>
                   </Stack>
                 </Paper>
 

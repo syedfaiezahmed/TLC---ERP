@@ -92,13 +92,17 @@ class FeeCollectionService {
       const dueDate = new Date(voucher.dueDate);
       dueDate.setHours(0, 0, 0, 0);
       const isOverdue = today > dueDate;
-      const applicableAmount = isOverdue
+
+      // CA RULE: Applicable amount depends on whether admin chose to include late fee.
+      // If admin waives late fee (lateFeeIncluded=false), the voucher's payable amount
+      // is just the base totalFee — late fee is NOT recognized as revenue.
+      const applicableAmount = (isOverdue && lateFeeIncluded)
         ? (voucher.totalWithLateFee || voucher.totalFee)
         : voucher.totalFee;
       const currentPaidAmount = voucher.paidAmount || 0;
       const remainingBalance = applicableAmount - currentPaidAmount;
 
-      console.log('[FeeCollection] Step 3: Amounts — applicable:', applicableAmount, 'paid so far:', currentPaidAmount, 'remaining:', remainingBalance, 'new payment:', numericAmount);
+      console.log('[FeeCollection] Step 3: Amounts — applicable:', applicableAmount, 'paid so far:', currentPaidAmount, 'remaining:', remainingBalance, 'new payment:', numericAmount, 'lateFeeIncluded:', lateFeeIncluded);
 
       if (numericAmount > remainingBalance + 0.5) {
         throw new Error(`Payment (PKR ${numericAmount}) exceeds remaining balance (PKR ${remainingBalance.toFixed(0)})`);
@@ -196,7 +200,7 @@ class FeeCollectionService {
           payment,
           paymentAmount: numericAmount,
           paymentMethod,
-          lateFeeAmount: isOverdue ? (voucher.lateFeeAmount || 0) : 0,
+          lateFeeAmount: lateFeeIncluded ? (Number(providedLateFeeAmount) || voucher.lateFeeAmount || 0) : 0,
           discountAmount: Number(discountAmount) || 0,
           date: payDate,
         });

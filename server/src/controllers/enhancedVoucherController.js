@@ -111,6 +111,17 @@ class VoucherController {
       const companyId = resolveCompanyId(req);
       if (!companyId) return res.status(400).json({ message: 'Company ID is required' });
 
+      // Auto-mark overdue: any pending/partial voucher past due date → overdue
+      // Ensures list and stats stay consistent.
+      await FeeVoucher.updateMany(
+        {
+          company: companyId,
+          status: { $in: ['pending', 'partial'] },
+          dueDate: { $lt: new Date() },
+        },
+        { $set: { status: 'overdue' } }
+      );
+
       // Build query
       const query = { company: companyId };
 
