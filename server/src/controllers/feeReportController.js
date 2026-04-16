@@ -748,80 +748,122 @@ const getVoucherReport = async (req, res) => {
         if (status) matchStage.status = status;
         if (studentId) matchStage.student = new mongoose.Types.ObjectId(studentId);
 
+        // Heal for accurate statuses/paid amounts.
+        try {
+            const { healVoucherStatuses } = await import('../services/voucherHealService.js');
+            await healVoucherStatuses(companyId);
+        } catch (_) { /* non-fatal */ }
+
+        const pageNum = parseInt(page, 10) || 1;
+        const limitNum = parseInt(limit, 10) || 50;
+
         const pipeline = [
             { $match: matchStage },
+            {
+                $addFields: {
+                    effectivePaid: {
+                        $add: [
+                            { $ifNull: ['$paidAmount', 0] },
+                            { $ifNull: ['$paymentDiscountTotal', 0] },
+                        ],
+                    },
+                },
+            },
+            {
+                $addFields: {
+                    balanceDue: {
+                        $max: [0, { $subtract: [{ $ifNull: ['$totalFee', 0] }, '$effectivePaid'] }],
+                    },
+                },
+            },
             {
                 $lookup: {
                     from: 'students',
                     localField: 'student',
                     foreignField: '_id',
-                    as: 'student'
-                }
+                    as: 'student',
+                },
             },
             { $unwind: { path: '$student', preserveNullAndEmptyArrays: true } },
-            {
-                $lookup: {
-                    from: 'fees',
-                    localField: 'fee',
-                    foreignField: '_id',
-                    as: 'fee'
-                }
-            },
-            { $unwind: { path: '$fee', preserveNullAndEmptyArrays: true } },
-            {
-                $lookup: {
-                    from: 'users',
-                    localField: 'createdBy',
-                    foreignField: '_id',
-                    as: 'createdBy'
-                }
-            },
-            { $unwind: { path: '$createdBy', preserveNullAndEmptyArrays: true } },
             {
                 $project: {
                     voucherNumber: 1,
                     status: 1,
                     createdAt: 1,
-                    totalAmount: 1,
-                    paidAmount: 1,
-                    balanceDue: 1,
+                    generatedDate: 1,
+                    feeMonth: 1,
                     dueDate: 1,
+                    totalFee: 1,
+                    paidAmount: 1,
+                    paymentDiscountTotal: 1,
+                    effectivePaid: 1,
+                    balanceDue: 1,
+                    lateFeeAmount: 1,
+                    'student._id': 1,
                     'student.name': 1,
-                    'student.rollNumber': 1,
-                    'fee.feeNumber': 1,
-                    'fee.items': 1,
-                    'createdBy.name': 1
-                }
+                    'student.studentId': 1,
+                    'student.contact': 1,
+                },
             },
-            { $sort: { createdAt: -1 } }
+            { $sort: { createdAt: -1 } },
         ];
 
-        const [vouchers, totalCount] = await Promise.all([
-            FeeVoucher.aggregate(pipeline),
-            FeeVoucher.countDocuments(matchStage)
-        ]);
+        const dataPipeline = [
+            ...pipeline,
+            {
+                $facet: {
+                    data: [
+                        { $skip: (pageNum - 1) * limitNum },
+                        { $limit: limitNum },
+                    ],
+                    totalCount: [{ $count: 'count' }],
+                    summary: [
+                        {
+                            $group: {
+                                _id: '$status',
+                                count: { $sum: 1 },
+                                totalFee: { $sum: { $ifNull: ['$totalFee', 0] } },
+                                totalPaid: { $sum: { $ifNull: ['$paidAmount', 0] } },
+                                totalDiscount: { $sum: { $ifNull: ['$paymentDiscountTotal', 0] } },
+                                totalBalance: { $sum: '$balanceDue' },
+                            },
+                        },
+                    ],
+                },
+            },
+        ];
 
-        // Calculate summary
-        const summary = vouchers.reduce((acc, voucher) => {
-            acc.totalVouchers += 1;
-            acc.totalAmount += voucher.totalAmount || 0;
-            acc.totalPaid += voucher.paidAmount || 0;
-            acc.totalPending += voucher.balanceDue || 0;
-            
-            if (voucher.status === 'paid') acc.paidVouchers += 1;
-            else if (voucher.status === 'partial') acc.partialVouchers += 1;
-            else acc.unpaidVouchers += 1;
-            
-            return acc;
-        }, {
+        const [facetResult] = await FeeVoucher.aggregate(dataPipeline);
+        const vouchers = facetResult?.data || [];
+        const totalCount = facetResult?.totalCount?.[0]?.count || 0;
+        const byStatus = facetResult?.summary || [];
+
+        const summary = {
             totalVouchers: 0,
-            totalAmount: 0,
-            totalPaid: 0,
-            totalPending: 0,
+            totalAmount: 0,          // totalFee across all matched
+            totalPaid: 0,            // cash received
+            totalDiscount: 0,        // discount allowed
+            totalPending: 0,         // remaining receivable
             paidVouchers: 0,
             partialVouchers: 0,
-            unpaidVouchers: 0
-        });
+            unpaidVouchers: 0,
+            overdueVouchers: 0,
+            cancelledVouchers: 0,
+        };
+        for (const s of byStatus) {
+            summary.totalVouchers += s.count;
+            if (s._id !== 'cancelled') {
+                summary.totalAmount += s.totalFee || 0;
+                summary.totalPaid += s.totalPaid || 0;
+                summary.totalDiscount += s.totalDiscount || 0;
+                summary.totalPending += s.totalBalance || 0;
+            }
+            if (s._id === 'paid') summary.paidVouchers = s.count;
+            else if (s._id === 'partial') summary.partialVouchers = s.count;
+            else if (s._id === 'overdue') summary.overdueVouchers = s.count;
+            else if (s._id === 'cancelled') summary.cancelledVouchers = s.count;
+            else summary.unpaidVouchers += s.count; // pending
+        }
 
         const result = {
             vouchers,
