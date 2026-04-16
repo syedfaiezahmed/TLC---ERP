@@ -11,6 +11,67 @@ const resolveCompanyId = (req) => {
   return req.body?.companyId || req.query?.companyId || req.user?.company?.toString() || null;
 };
 
+/**
+ * CA-correct voucher status heal.
+ * Recomputes `status` atomically from paidAmount vs totalFee + dueDate:
+ *   - paidAmount >= totalFee - 0.5   → 'paid'          (base fully covered; late fee may be waived)
+ *   - paidAmount > 0 AND past due    → 'overdue'
+ *   - paidAmount > 0                 → 'partial'
+ *   - paidAmount == 0 AND past due   → 'overdue'
+ *   - otherwise                      → 'pending'
+ * Preserves 'cancelled'. Also backfills paidDate when a voucher becomes paid.
+ */
+const healVoucherStatuses = async (companyId) => {
+  const now = new Date();
+  try {
+    await FeeVoucher.updateMany(
+      { company: companyId, status: { $ne: 'cancelled' } },
+      [
+        {
+          $set: {
+            status: {
+              $switch: {
+                branches: [
+                  {
+                    case: { $gte: [{ $ifNull: ['$paidAmount', 0] }, { $subtract: ['$totalFee', 0.5] }] },
+                    then: 'paid',
+                  },
+                  {
+                    case: {
+                      $and: [
+                        { $gt: [{ $ifNull: ['$paidAmount', 0] }, 0] },
+                        { $lt: ['$dueDate', now] },
+                      ],
+                    },
+                    then: 'overdue',
+                  },
+                  { case: { $gt: [{ $ifNull: ['$paidAmount', 0] }, 0] }, then: 'partial' },
+                  { case: { $lt: ['$dueDate', now] }, then: 'overdue' },
+                ],
+                default: 'pending',
+              },
+            },
+            paidDate: {
+              $cond: [
+                {
+                  $and: [
+                    { $gte: [{ $ifNull: ['$paidAmount', 0] }, { $subtract: ['$totalFee', 0.5] }] },
+                    { $not: ['$paidDate'] },
+                  ],
+                },
+                now,
+                '$paidDate',
+              ],
+            },
+          },
+        },
+      ]
+    );
+  } catch (err) {
+    console.error('[healVoucherStatuses] failed (non-fatal):', err.message);
+  }
+};
+
 class VoucherController {
   async generateVouchers(req, res) {
     try {
@@ -111,16 +172,12 @@ class VoucherController {
       const companyId = resolveCompanyId(req);
       if (!companyId) return res.status(400).json({ message: 'Company ID is required' });
 
-      // Auto-mark overdue: any pending/partial voucher past due date → overdue
-      // Ensures list and stats stay consistent.
-      await FeeVoucher.updateMany(
-        {
-          company: companyId,
-          status: { $in: ['pending', 'partial'] },
-          dueDate: { $lt: new Date() },
-        },
-        { $set: { status: 'overdue' } }
-      );
+      // CA-correct status heal: compute status from paidAmount + dueDate for ALL vouchers.
+      // - paidAmount >= totalFee       → paid (late fee may be waived; base fully covered)
+      // - 0 < paidAmount < totalFee    → partial (or overdue if past due)
+      // - paidAmount == 0              → pending (or overdue if past due)
+      // Bad-debt and cancelled vouchers are preserved.
+      await healVoucherStatuses(companyId);
 
       // Build query
       const query = { company: companyId };
@@ -279,16 +336,8 @@ class VoucherController {
       const companyId = resolveCompanyId(req);
       if (!companyId) return res.status(400).json({ success: false, message: 'Company ID is required' });
 
-      // Auto-mark overdue: any pending/partial voucher past due date → overdue
-      const now = new Date();
-      await FeeVoucher.updateMany(
-        {
-          company: companyId,
-          status: { $in: ['pending', 'partial'] },
-          dueDate: { $lt: now },
-        },
-        { $set: { status: 'overdue' } }
-      );
+      // Heal voucher statuses first so stats reflect true paid/overdue/partial counts.
+      await healVoucherStatuses(companyId);
 
       const statistics = await FeeVoucher.aggregate([
         { $match: { company: new mongoose.Types.ObjectId(companyId) } },
