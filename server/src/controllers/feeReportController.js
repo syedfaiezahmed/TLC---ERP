@@ -150,19 +150,20 @@ const getFeeCollectionReport = async (req, res) => {
         const payments = facetResult?.data || [];
         const totalCount = facetResult?.totalCount?.[0]?.count || 0;
 
-        // Calculate totals
-        const totals = payments.reduce((acc, payment) => {
-            acc.totalAmount += payment.amount || 0;
-            acc.totalLateFee += payment.lateFeeAmount || 0;
-            acc.totalDiscount += payment.discountAmount || 0;
-            acc.netCollection += (payment.amount || 0) - (payment.discountAmount || 0);
-            return acc;
-        }, {
-            totalAmount: 0,
-            totalLateFee: 0,
-            totalDiscount: 0,
-            netCollection: 0
-        });
+        // CA-correct summary: aggregate over ALL matching records, not just current page.
+        // `amount` is cash actually received (what hits bank/cash). Discount is separately tracked.
+        // grossBilled = what student was charged (cash + discount waived).
+        const summaryPipeline = [...pipeline.filter(s => !s.$sort), {
+            $group: {
+                _id: null,
+                totalAmount: { $sum: { $ifNull: ['$amount', 0] } },
+                totalLateFee: { $sum: { $ifNull: ['$lateFeeAmount', 0] } },
+                totalDiscount: { $sum: { $ifNull: ['$discountAmount', 0] } },
+                totalPayments: { $sum: 1 },
+            }
+        }];
+        const [summaryAgg] = await FeePayment.aggregate(summaryPipeline);
+        const agg = summaryAgg || { totalAmount: 0, totalLateFee: 0, totalDiscount: 0, totalPayments: 0 };
 
         const result = {
             payments,
@@ -173,9 +174,13 @@ const getFeeCollectionReport = async (req, res) => {
                 pages: Math.ceil(totalCount / limit)
             },
             summary: {
-                ...totals,
-                totalPayments: payments.length,
-                averagePayment: payments.length > 0 ? totals.netCollection / payments.length : 0
+                totalAmount: agg.totalAmount,         // Cash received
+                totalLateFee: agg.totalLateFee,       // Late fee collected (subset of cash)
+                totalDiscount: agg.totalDiscount,     // Discount given (not cash)
+                netCollection: agg.totalAmount,       // Same as totalAmount — cash that hit accounts
+                grossBilled: agg.totalAmount + agg.totalDiscount, // Accrual view: total charged to students
+                totalPayments: agg.totalPayments,
+                averagePayment: agg.totalPayments > 0 ? agg.totalAmount / agg.totalPayments : 0
             },
             filters: {
                 startDate,
