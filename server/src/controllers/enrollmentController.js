@@ -17,6 +17,7 @@ const createEnrollment = async (req, res) => {
       studentId,
       courseId,
       batchId,
+      groupId,
       enrollmentDate,
       // New fee fields
       originalFee,
@@ -91,6 +92,11 @@ const createEnrollment = async (req, res) => {
     const createdEnrollment = await enrollment.save();
     try { await logAudit({ req, companyId, action: 'create', entityType: 'enrollment', entityId: createdEnrollment._id, before: null, after: createdEnrollment }); } catch(_) {}
 
+    // Sync student's academic group if provided
+    if (groupId) {
+      await Student.findByIdAndUpdate(studentId, { group: groupId });
+    }
+
     await createdEnrollment.populate(['student', 'course', 'batch']);
     return res.status(201).json(createdEnrollment);
   } catch (error) {
@@ -120,10 +126,9 @@ const getEnrollmentsByCompany = async (req, res) => {
 
     const [enrollments, total] = await Promise.all([
       StudentEnrollment.find(query)
-        .populate('student', 'name email contact')
-        .populate('course', 'name fee code')
-        .populate('course.group', 'name code color')
-        .populate('batch', 'name')
+        .populate('student', 'name email contact group')
+        .populate('course', 'name fee')
+        .populate('batch', 'name startTime endTime days')
         .sort({ enrollmentDate: -1 })
         .limit(limit)
         .skip(skip)
@@ -192,6 +197,8 @@ const updateEnrollment = async (req, res) => {
       discountReason,
       admissionFee,
       admissionFeeApplied,
+      batchId,
+      groupId,
     } = req.body;
 
     const enrollment = await StudentEnrollment.findById(req.params.id).populate('company');
@@ -229,9 +236,15 @@ const updateEnrollment = async (req, res) => {
     if (admissionFee !== undefined) enrollment.admissionFee = admissionFee;
     if (admissionFeeApplied !== undefined) enrollment.admissionFeeApplied = admissionFeeApplied;
     if (notes) enrollment.notes = notes;
+    if (batchId !== undefined) enrollment.batch = batchId || undefined;
 
     const updatedEnrollment = await enrollment.save();
     try { await logAudit({ req, companyId: enrollment.company._id, action: 'update', entityType: 'enrollment', entityId: enrollment._id, before, after: updatedEnrollment }); } catch(_) {}
+
+    // Sync student's academic group if provided
+    if (groupId !== undefined) {
+      await Student.findByIdAndUpdate(enrollment.student, { group: groupId || undefined });
+    }
 
     await updatedEnrollment.populate(['student', 'course', 'batch']);
     return res.json(updatedEnrollment);

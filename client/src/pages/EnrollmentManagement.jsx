@@ -32,6 +32,8 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { getStudents } from '../redux/studentSlice';
 import { getCourses } from '../redux/courseSlice';
+import { getBatches } from '../redux/batchSlice';
+import { getGroups } from '../redux/groupSlice';
 import {
   fetchEnrollments, createEnrollment, updateEnrollment, deleteEnrollment,
   fetchEnrollmentStatistics, clearSuccess, clearError,
@@ -196,6 +198,8 @@ const EnrollmentManagement = () => {
   const { selectedCompany } = useSelector(s => s.companies || {});
   const { students = [] } = useSelector(s => s.students || {});
   const { courses = [] } = useSelector(s => s.courses || {});
+  const { batches = [] } = useSelector(s => s.batches || {});
+  const { groups = [] } = useSelector(s => s.groups || {});
   const { enrollments, statistics, pagination, loading, errors, successMessage } = useSelector(s => s.enrollments || {});
 
   const cid = companyId || selectedCompany?._id;
@@ -235,6 +239,7 @@ const EnrollmentManagement = () => {
     studentId: null,
     courseId: null,
     batchId: '',
+    groupId: '',
     enrollmentDate: moment().format('YYYY-MM-DD'),
     startDate: moment().format('YYYY-MM-DD'),
     originalFee: '',
@@ -256,6 +261,8 @@ const EnrollmentManagement = () => {
     if (!cid) return;
     dispatch(getStudents({ companyId: cid, limit: 1000 }));
     dispatch(getCourses(cid));
+    dispatch(getBatches(cid));
+    dispatch(getGroups(cid));
     loadEnrollments();
   }, [cid, dispatch]);
 
@@ -281,7 +288,11 @@ const EnrollmentManagement = () => {
   // ─── Form handlers ───────────────────────────────────────────────────────────
   const handleStudentChange = (_, student) => {
     setSelectedStudent(student);
-    setFormData(d => ({ ...d, studentId: student?._id || null }));
+    setFormData(d => ({
+      ...d,
+      studentId: student?._id || null,
+      groupId: student?.group?._id || student?.group || d.groupId || '',
+    }));
   };
 
   const handleCourseChange = (_, course) => {
@@ -290,6 +301,7 @@ const EnrollmentManagement = () => {
     setFormData(d => ({
       ...d,
       courseId: course?._id || null,
+      batchId: '',
       originalFee: fee,
       finalFee: d.finalFee || fee,
     }));
@@ -300,6 +312,7 @@ const EnrollmentManagement = () => {
       studentId: null,
       courseId: null,
       batchId: '',
+      groupId: '',
       enrollmentDate: moment().format('YYYY-MM-DD'),
       startDate: moment().format('YYYY-MM-DD'),
       originalFee: '',
@@ -324,6 +337,7 @@ const EnrollmentManagement = () => {
         studentId: enrollment.student?._id,
         courseId: enrollment.course?._id,
         batchId: enrollment.batch?._id || '',
+        groupId: enrollment.student?.group?._id || enrollment.student?.group || '',
         enrollmentDate: moment(enrollment.enrollmentDate).format('YYYY-MM-DD'),
         startDate: moment(enrollment.startDate).format('YYYY-MM-DD'),
         originalFee: enrollment.originalFee || enrollment.course?.fee || enrollment.monthlyFee || 0,
@@ -356,6 +370,7 @@ const EnrollmentManagement = () => {
       studentId: formData.studentId,
       courseId: formData.courseId,
       batchId: formData.batchId || undefined,
+      groupId: formData.groupId || undefined,
       enrollmentDate: formData.enrollmentDate,
       startDate: formData.startDate,
       originalFee: parseFloat(formData.originalFee) || 0,
@@ -554,9 +569,7 @@ const EnrollmentManagement = () => {
                   <TableHead>
                     <TableRow sx={{ bgcolor: 'background.default' }}>
                       <TableCell sx={{ fontWeight: 700 }}>Student</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>Course</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>Group</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>Batch</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>Course / Batch / Group</TableCell>
                       <TableCell sx={{ fontWeight: 700 }}>Fee Structure</TableCell>
                       <TableCell align="center" sx={{ fontWeight: 700 }}>Status</TableCell>
                       <TableCell sx={{ fontWeight: 700 }}>Enrolled On</TableCell>
@@ -582,24 +595,32 @@ const EnrollmentManagement = () => {
                             </Stack>
                           </TableCell>
                           <TableCell>
-                            <Stack direction="row" alignItems="center" spacing={1}>
-                              <ClassIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
-                              <Typography variant="body2">{e.course?.name}</Typography>
+                            <Stack direction="row" alignItems="flex-start" spacing={1}>
+                              <ClassIcon sx={{ fontSize: 18, color: 'text.secondary', mt: 0.3 }} />
+                              <Box>
+                                <Typography variant="body2" fontWeight={600}>{e.course?.name}</Typography>
+                                {e.batch?.name && (
+                                  <Chip
+                                    label={`Batch: ${e.batch.name}`}
+                                    size="small"
+                                    variant="outlined"
+                                    color="primary"
+                                    sx={{ mr: 0.5, mt: 0.3, height: 18, fontSize: '0.65rem', fontWeight: 700 }}
+                                  />
+                                )}
+                                {e.student?.group && (
+                                  <Chip
+                                    label={typeof e.student.group === 'object' ? e.student.group.name : 'Group'}
+                                    size="small"
+                                    sx={{
+                                      mt: 0.3, height: 18, fontSize: '0.65rem', fontWeight: 700,
+                                      bgcolor: typeof e.student.group === 'object' ? `${e.student.group.color || '#1976d2'}22` : undefined,
+                                      color: typeof e.student.group === 'object' ? (e.student.group.color || 'primary.main') : undefined,
+                                    }}
+                                  />
+                                )}
+                              </Box>
                             </Stack>
-                          </TableCell>
-                          <TableCell>
-                            {e.course?.group ? (
-                              <Chip
-                                label={e.course.group.name || e.course.group.code}
-                                size="small"
-                                sx={{ fontWeight: 600, borderRadius: 1, bgcolor: `${e.course.group.color || '#1976d2'}22`, color: e.course.group.color || 'primary.main' }}
-                              />
-                            ) : <Typography variant="caption" color="text.disabled">—</Typography>}
-                          </TableCell>
-                          <TableCell>
-                            {e.batch ? (
-                              <Chip label={e.batch.name} size="small" sx={{ fontWeight: 600, borderRadius: 1, bgcolor: 'grey.100', color: 'text.primary' }} />
-                            ) : <Typography variant="caption" color="text.disabled">—</Typography>}
                           </TableCell>
                           <TableCell>
                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
@@ -672,7 +693,7 @@ const EnrollmentManagement = () => {
                       );
                     }) : (
                       <TableRow>
-                        <TableCell colSpan={8} align="center" sx={{ py: 6 }}>
+                        <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
                           <SchoolIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
                           <Typography color="text.secondary">
                             No enrollments found. Click "New Enrollment" to add students to courses.
@@ -879,6 +900,67 @@ const EnrollmentManagement = () => {
                   <TextField {...params} label="Select Course *" size="small" required />
                 )}
               />
+            </Grid>
+
+            {/* Batch Selection — filtered by selected course */}
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Select Batch (optional)</InputLabel>
+                <Select
+                  value={formData.batchId}
+                  label="Select Batch (optional)"
+                  onChange={e => setFormData(d => ({ ...d, batchId: e.target.value }))}
+                  disabled={!formData.courseId}
+                >
+                  <MenuItem value="">— No Batch —</MenuItem>
+                  {batches
+                    .filter(b => {
+                      const bCourse = b.course?._id || b.course;
+                      return bCourse === formData.courseId;
+                    })
+                    .map(b => (
+                      <MenuItem key={b._id} value={b._id}>
+                        <Box>
+                          <Typography variant="body2" fontWeight={600}>{b.name}</Typography>
+                          {(b.startTime || b.days?.length > 0) && (
+                            <Typography variant="caption" color="text.secondary">
+                              {b.startTime && b.endTime ? `${b.startTime} – ${b.endTime}` : ''}
+                              {b.days?.length > 0 ? `  ·  ${b.days.join(', ')}` : ''}
+                            </Typography>
+                          )}
+                        </Box>
+                      </MenuItem>
+                    ))}
+                  {formData.courseId && batches.filter(b => (b.course?._id || b.course) === formData.courseId).length === 0 && (
+                    <MenuItem disabled>
+                      <Typography variant="caption" color="text.secondary">No batches for this course</Typography>
+                    </MenuItem>
+                  )}
+                </Select>
+              </FormControl>
+            </Grid>
+
+            {/* Group Selection */}
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Academic Group (optional)</InputLabel>
+                <Select
+                  value={formData.groupId}
+                  label="Academic Group (optional)"
+                  onChange={e => setFormData(d => ({ ...d, groupId: e.target.value }))}
+                >
+                  <MenuItem value="">— No Group —</MenuItem>
+                  {groups.map(g => (
+                    <MenuItem key={g._id} value={g._id}>
+                      <Box display="flex" alignItems="center" gap={1}>
+                        <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: g.color || 'primary.main', flexShrink: 0 }} />
+                        <Typography variant="body2">{g.name}</Typography>
+                        {g.level && <Typography variant="caption" color="text.secondary">({g.level})</Typography>}
+                      </Box>
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
             </Grid>
 
             {/* Dates */}
