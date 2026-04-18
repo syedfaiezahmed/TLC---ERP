@@ -555,6 +555,8 @@ const EnrollmentManagement = () => {
                     <TableRow sx={{ bgcolor: 'background.default' }}>
                       <TableCell sx={{ fontWeight: 700 }}>Student</TableCell>
                       <TableCell sx={{ fontWeight: 700 }}>Course</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>Group</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>Batch</TableCell>
                       <TableCell sx={{ fontWeight: 700 }}>Fee Structure</TableCell>
                       <TableCell align="center" sx={{ fontWeight: 700 }}>Status</TableCell>
                       <TableCell sx={{ fontWeight: 700 }}>Enrolled On</TableCell>
@@ -584,6 +586,20 @@ const EnrollmentManagement = () => {
                               <ClassIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
                               <Typography variant="body2">{e.course?.name}</Typography>
                             </Stack>
+                          </TableCell>
+                          <TableCell>
+                            {e.course?.group ? (
+                              <Chip
+                                label={e.course.group.name || e.course.group.code}
+                                size="small"
+                                sx={{ fontWeight: 600, borderRadius: 1, bgcolor: `${e.course.group.color || '#1976d2'}22`, color: e.course.group.color || 'primary.main' }}
+                              />
+                            ) : <Typography variant="caption" color="text.disabled">—</Typography>}
+                          </TableCell>
+                          <TableCell>
+                            {e.batch ? (
+                              <Chip label={e.batch.name} size="small" sx={{ fontWeight: 600, borderRadius: 1, bgcolor: 'grey.100', color: 'text.primary' }} />
+                            ) : <Typography variant="caption" color="text.disabled">—</Typography>}
                           </TableCell>
                           <TableCell>
                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
@@ -656,7 +672,7 @@ const EnrollmentManagement = () => {
                       );
                     }) : (
                       <TableRow>
-                        <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
+                        <TableCell colSpan={8} align="center" sx={{ py: 6 }}>
                           <SchoolIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
                           <Typography color="text.secondary">
                             No enrollments found. Click "New Enrollment" to add students to courses.

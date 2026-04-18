@@ -121,7 +121,8 @@ const getEnrollmentsByCompany = async (req, res) => {
     const [enrollments, total] = await Promise.all([
       StudentEnrollment.find(query)
         .populate('student', 'name email contact')
-        .populate('course', 'name fee')
+        .populate('course', 'name fee code')
+        .populate('course.group', 'name code color')
         .populate('batch', 'name')
         .sort({ enrollmentDate: -1 })
         .limit(limit)
