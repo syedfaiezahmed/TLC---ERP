@@ -9,6 +9,7 @@ import {
   deleteStudent 
 } from '../redux/studentSlice';
 import { getGroups } from '../redux/groupSlice';
+import * as api from '../services/api';
 import {
   Box,
   Button,
@@ -56,7 +57,9 @@ import {
   Business as BusinessIcon,
   FilterList as FilterListIcon,
   Download as DownloadIcon,
-  School as SchoolIcon
+  School as SchoolIcon,
+  AutoFixHigh as AutoFixHighIcon,
+  Lock as LockIcon,
 } from '@mui/icons-material';
 import { exportToExcel, exportToPDF } from '../utils/exportUtils';
 import moment from 'moment';
@@ -75,7 +78,9 @@ const Students = () => {
   const [filterGroup, setFilterGroup] = useState('all');
   const [currentPage, setCurrentPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-  
+  const [nextIdPreview, setNextIdPreview] = useState('');
+  const [migrating, setMigrating] = useState(false);
+
   const [currentStudent, setCurrentStudent] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
@@ -121,12 +126,12 @@ const Students = () => {
     setCurrentPage(0); // Reset to first page when searching
   };
 
-  const handleOpen = (student = null) => {
+  const handleOpen = async (student = null) => {
     if (student) {
       setCurrentStudent(student);
       setFormData({
         name: student.name,
-        studentId: student.studentId || '',
+        studentId: student.studentId || '',  
         email: student.email || '',
         contact: student.contact || '',
         dateOfBirth: student.dateOfBirth ? moment(student.dateOfBirth).format('YYYY-MM-DD') : '',
@@ -142,10 +147,18 @@ const Students = () => {
       });
     } else {
       setCurrentStudent(null);
+      setNextIdPreview('Loading…');
+      const id = companyId || selectedCompany?._id;
+      if (id) {
+        try {
+          const { data } = await api.fetchNextStudentId(id);
+          setNextIdPreview(data.studentId);
+        } catch { setNextIdPreview('Auto-generated'); }
+      }
       setFormData({
         name: '',
         studentId: '',
-        email: '',
+        email: '',  
         contact: '',
         dateOfBirth: '',
         gender: 'Male',
@@ -181,14 +194,16 @@ const Students = () => {
 
     try {
       if (currentStudent) {
+        const { studentId: _sid, ...rest } = formData;
         await dispatch(updateStudent({ 
           id: currentStudent._id, 
-          student: formData 
+          student: rest 
         })).unwrap();
         toast.success('Student updated successfully');
       } else {
+        const { studentId: _sid, ...rest } = formData;
         await dispatch(createStudent({ 
-          ...formData, 
+          ...rest, 
           companyId: id 
         })).unwrap();
         toast.success('Student created successfully');
@@ -197,6 +212,22 @@ const Students = () => {
     } catch (err) {
       console.error('Failed to save student:', err);
       toast.error(err.message || 'Failed to save student');
+    }
+  };
+
+  const handleMigrateIds = async () => {
+    const id = companyId || selectedCompany?._id;
+    if (!id) return;
+    if (!window.confirm('This will reassign Student IDs to all students in TLC-YY0001 format (sorted by join date). Continue?')) return;
+    setMigrating(true);
+    try {
+      const { data } = await api.migrateStudentIds(id);
+      toast.success(`${data.message}`);
+      dispatch(getStudents({ companyId: id, page: currentPage + 1, limit: rowsPerPage, search: searchTerm }));
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Migration failed');
+    } finally {
+      setMigrating(false);
     }
   };
 
@@ -273,6 +304,16 @@ const Students = () => {
                   PDF
                 </Button>
                 <Button
+                  variant="outlined"
+                  size="medium"
+                  startIcon={migrating ? <CircularProgress size={14} /> : <AutoFixHighIcon />}
+                  onClick={handleMigrateIds}
+                  disabled={migrating}
+                  sx={{ borderRadius: 2, whiteSpace: 'nowrap', textTransform: 'none', fontWeight: 600, flex: { xs: 1, sm: 'none' } }}
+                >
+                  {migrating ? 'Migrating…' : 'Assign IDs'}
+                </Button>
+                <Button
                   variant="contained"
                   size="medium"
                   startIcon={<AddIcon />}
@@ -337,6 +378,7 @@ const Students = () => {
         <Table size="small" sx={{ minWidth: 650 }}>
           <TableHead sx={{ bgcolor: alpha(theme.palette.primary.main, 0.04) }}>
             <TableRow>
+              <TableCell sx={{ py: 1, fontWeight: 700, color: 'text.secondary', borderBottom: 'none' }}>Student ID</TableCell>
               <TableCell sx={{ py: 1, fontWeight: 700, color: 'text.secondary', borderBottom: 'none' }}>Student Details</TableCell>
               <TableCell sx={{ py: 1, fontWeight: 700, color: 'text.secondary', borderBottom: 'none' }}>Contact Info</TableCell>
               <TableCell sx={{ py: 1, fontWeight: 700, color: 'text.secondary', borderBottom: 'none', display: { xs: 'none', md: 'table-cell' } }}>Group</TableCell>
@@ -347,13 +389,20 @@ const Students = () => {
           <TableBody>
             {loading ? (
                 <TableRow>
-                  <TableCell colSpan={5} align="center" sx={{ py: 4 }}>
+                  <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
                     <CircularProgress size={30} />
                   </TableCell>
                 </TableRow>
             ) : students && students.length > 0 ? (
               students.filter(s => filterGroup === 'all' || (s.group?._id || s.group) === filterGroup).map((student) => (
                 <TableRow key={student._id} hover sx={{ '&:last-child td, &:last-child th': { border: 0 }, transition: 'background-color 0.2s' }}>
+                  <TableCell sx={{ py: 0.5 }}>
+                    <Chip
+                      label={student.studentId || '—'}
+                      size="small"
+                      sx={{ fontWeight: 700, fontFamily: 'monospace', fontSize: 12, bgcolor: alpha(theme.palette.primary.main, 0.08), color: 'primary.dark', borderRadius: 1 }}
+                    />
+                  </TableCell>
                   <TableCell sx={{ py: 0.5 }}>
                     <Box display="flex" alignItems="center" gap={1.5}>
                       <Avatar
@@ -454,7 +503,7 @@ const Students = () => {
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
+                <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
                   <Box display="flex" flexDirection="column" alignItems="center" gap={1}>
                     <PersonIcon sx={{ fontSize: 48, color: 'text.disabled', opacity: 0.5 }} />
                     <Typography variant="subtitle1" color="text.secondary">No students found</Typography>
@@ -518,11 +567,15 @@ const Students = () => {
             <Grid item xs={12} md={6}>
               <TextField
                 fullWidth
-                label="Student ID / Roll No"
+                label="Student ID"
                 name="studentId"
-                value={formData.studentId}
-                onChange={handleChange}
-                placeholder="e.g. CI-2024-001"
+                value={currentStudent ? (formData.studentId || '—') : nextIdPreview}
+                InputProps={{
+                  readOnly: true,
+                  startAdornment: <LockIcon sx={{ fontSize: 15, color: 'text.disabled', mr: 0.5 }} />,
+                  sx: { fontFamily: 'monospace', fontWeight: 700, bgcolor: alpha(theme.palette.primary.main, 0.04) }
+                }}
+                helperText={currentStudent ? 'Auto-generated — cannot be changed' : 'Will be auto-assigned on save'}
               />
             </Grid>
             <Grid item xs={12} md={6}>

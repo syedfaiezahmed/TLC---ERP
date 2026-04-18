@@ -27,6 +27,8 @@ export const fetchStudents = (companyId, { page = 1, limit = 20, search = '' } =
 export const createStudent = (newStudent) => API.post('/students', newStudent);
 export const updateStudent = (id, updatedStudent) => API.put(`/students/${id}`, updatedStudent);
 export const deleteStudent = (id) => API.delete(`/students/${id}`);
+export const fetchNextStudentId = (companyId) => API.get(`/students/next-id/${companyId}`);
+export const migrateStudentIds = (companyId) => API.post(`/students/migrate-ids/${companyId}`);
 
 export const fetchFees = (companyId, page = 1, limit = 20, search = '', status = '', startDate = '', endDate = '', studentId = '') => {
     let url = `/fees/company/${companyId}?page=${page}&limit=${limit}`;

@@ -5,6 +5,26 @@ import { canAccessCompany } from '../utils/companyAccess.js';
 import { logAudit } from '../services/auditService.js';
 import { postJournal } from '../services/journalService.js';
 
+// ─── Auto-ID Generator ────────────────────────────────────────────────────────
+// Format: TLC-{2-digit-year}{4-digit-sequence}  e.g. TLC-260001
+const generateStudentId = async (companyId, year) => {
+  const yy = String(year).slice(-2);
+  const prefix = `TLC-${yy}`;
+  const pattern = new RegExp(`^TLC-${yy}\\d{4}$`);
+
+  const last = await Student.findOne({ company: companyId, studentId: pattern })
+    .sort({ studentId: -1 })
+    .select('studentId')
+    .lean();
+
+  let seq = 1;
+  if (last?.studentId) {
+    const num = parseInt(last.studentId.slice(prefix.length), 10);
+    if (!isNaN(num)) seq = num + 1;
+  }
+  return `${prefix}${String(seq).padStart(4, '0')}`;
+};
+
 // @desc    Create a new student
 // @route   POST /api/students
 // @access  Private/Admin
@@ -12,7 +32,6 @@ const createStudent = async (req, res) => {
   try {
     const { 
       name, 
-      studentId,
       contact, 
       email, 
       dateOfBirth,
@@ -33,9 +52,17 @@ const createStudent = async (req, res) => {
     if (!company) return res.status(404).json({ message: 'Company not found' });
     if (!canAccessCompany(req.user, company)) return res.status(401).json({ message: 'Not authorized to add student to this company' });
 
+    // Auto-generate student ID with retry on duplicate key
+    let autoStudentId;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      autoStudentId = await generateStudentId(companyId, new Date().getFullYear());
+      const conflict = await Student.exists({ studentId: autoStudentId });
+      if (!conflict) break;
+    }
+
     const student = new Student({
       name,
-      studentId,
+      studentId: autoStudentId,
       contact,
       email,
       dateOfBirth,
@@ -188,7 +215,6 @@ const updateStudent = async (req, res) => {
 
     const before = student.toObject();
     student.name = name || student.name;
-    student.studentId = studentId || student.studentId;
     student.contact = contact || student.contact;
     student.email = email || student.email;
     student.dateOfBirth = dateOfBirth || student.dateOfBirth;
@@ -230,10 +256,82 @@ const deleteStudent = async (req, res) => {
   }
 };
 
+// @desc    Preview the next auto-generated student ID
+// @route   GET /api/students/next-id/:companyId
+// @access  Private/Admin
+const getNextStudentId = async (req, res) => {
+  try {
+    const { companyId } = req.params;
+    const company = await Company.findById(companyId);
+    if (!company) return res.status(404).json({ message: 'Company not found' });
+    if (!canAccessCompany(req.user, company)) return res.status(401).json({ message: 'Not authorized' });
+
+    const nextId = await generateStudentId(companyId, new Date().getFullYear());
+    return res.json({ studentId: nextId });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Retroactively assign auto-IDs to all students (one-time migration)
+// @route   POST /api/students/migrate-ids/:companyId
+// @access  Private/Admin
+const migrateStudentIds = async (req, res) => {
+  try {
+    const { companyId } = req.params;
+    const company = await Company.findById(companyId);
+    if (!company) return res.status(404).json({ message: 'Company not found' });
+    if (!canAccessCompany(req.user, company)) return res.status(401).json({ message: 'Not authorized' });
+
+    // Fetch all students sorted by createdAt then _id for stable ordering
+    const students = await Student.find({ company: companyId })
+      .sort({ createdAt: 1, _id: 1 })
+      .select('_id createdAt')
+      .lean();
+
+    if (students.length === 0) return res.json({ message: 'No students to migrate', count: 0 });
+
+    // Group by creation year
+    const byYear = {};
+    for (const s of students) {
+      const year = new Date(s.createdAt).getFullYear();
+      if (!byYear[year]) byYear[year] = [];
+      byYear[year].push(s);
+    }
+
+    // Build bulk update operations
+    const ops = [];
+    for (const year of Object.keys(byYear).sort()) {
+      const yy = String(year).slice(-2);
+      const prefix = `TLC-${yy}`;
+      byYear[year].forEach((s, i) => {
+        ops.push({
+          updateOne: {
+            filter: { _id: s._id },
+            update: { $set: { studentId: `${prefix}${String(i + 1).padStart(4, '0')}` } },
+          },
+        });
+      });
+    }
+
+    await Student.bulkWrite(ops, { ordered: false });
+
+    const breakdown = Object.fromEntries(
+      Object.entries(byYear).map(([y, arr]) => [`${y}`, arr.length])
+    );
+    return res.json({ message: `Assigned IDs to ${students.length} students`, count: students.length, breakdown });
+  } catch (error) {
+    console.error('migrateStudentIds error:', error.message);
+    return res.status(500).json({ message: error.message });
+  }
+};
+
 export {
   createStudent,
   getStudents,
   getStudentById,
   updateStudent,
   deleteStudent,
+  getNextStudentId,
+  migrateStudentIds,
 };
