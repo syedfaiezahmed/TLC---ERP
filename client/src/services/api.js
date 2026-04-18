@@ -112,6 +112,7 @@ export const deletePurchase = (id) => API.delete(`/purchases/${id}`);
 export const deletePurchasePayment = (purchaseId, paymentId) => API.delete(`/purchases/${purchaseId}/pay/${paymentId}`);
 
 export const fetchBatches = (companyId) => API.get('/batches');
+export const fetchBatchStudents = (batchId) => API.get(`/batches/${batchId}/students`);
 export const createBatch = (newBatch) => API.post('/batches', newBatch);
 export const updateBatch = (id, updatedBatch) => API.put(`/batches/${id}`, updatedBatch);
 export const deleteBatch = (id) => API.delete(`/batches/${id}`);

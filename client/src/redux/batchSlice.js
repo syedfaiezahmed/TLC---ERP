@@ -37,10 +37,21 @@ export const deleteBatch = createAsyncThunk('batches/deleteBatch', async (id, { 
   }
 });
 
+export const getBatchStudents = createAsyncThunk('batches/getBatchStudents', async (batchId, { rejectWithValue }) => {
+  try {
+    const { data } = await api.fetchBatchStudents(batchId);
+    return data;
+  } catch (error) {
+    return rejectWithValue(error.response?.data || error.message);
+  }
+});
+
 const batchSlice = createSlice({
   name: 'batches',
   initialState: {
     batches: [],
+    enrolledStudents: [],
+    loadingStudents: false,
     loading: false,
     error: null,
   },
@@ -70,6 +81,18 @@ const batchSlice = createSlice({
       })
       .addCase(deleteBatch.fulfilled, (state, action) => {
         state.batches = state.batches.filter((b) => b._id !== action.payload);
+      })
+      .addCase(getBatchStudents.pending, (state) => {
+        state.loadingStudents = true;
+        state.enrolledStudents = [];
+      })
+      .addCase(getBatchStudents.fulfilled, (state, action) => {
+        state.loadingStudents = false;
+        state.enrolledStudents = action.payload;
+      })
+      .addCase(getBatchStudents.rejected, (state) => {
+        state.loadingStudents = false;
+        state.enrolledStudents = [];
       });
   },
 });

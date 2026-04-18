@@ -5,7 +5,7 @@ import {
   getAttendance, markAttendanceBulk, deleteAttendanceRecord,
   getMonthlyRegister, getAttendanceReport, getAttendanceStats,
 } from '../redux/attendanceSlice';
-import { getBatches } from '../redux/batchSlice';
+import { getBatches, getBatchStudents } from '../redux/batchSlice';
 import { getTeachers } from '../redux/teacherSlice';
 import {
   Container, Paper, Typography, TextField, Button, Grid, Table, TableBody,
@@ -41,7 +41,7 @@ const Attendance = () => {
   const { companyId } = useParams();
 
   // Redux state
-  const { batches }  = useSelector(s => s.batches);
+  const { batches, enrolledStudents, loadingStudents } = useSelector(s => s.batches);
   const { teachers } = useSelector(s => s.teachers);
   const { records: attendanceLogs, loading, saving, monthlyRegister, loadingRegister, report, loadingReport } =
     useSelector(s => s.attendance);
@@ -70,7 +70,14 @@ const Attendance = () => {
     }
   }, [dispatch, companyId]);
 
-  // ── Tab 0: load existing records + build rows ───────────────────────────────
+  // ── Fetch enrolled students whenever batch selection changes ─────────────────
+  useEffect(() => {
+    if (type === 'Student' && selectedBatch) {
+      dispatch(getBatchStudents(selectedBatch));
+    }
+  }, [dispatch, type, selectedBatch]);
+
+  // ── Tab 0: load existing attendance records ──────────────────────────────────
   useEffect(() => {
     if (mainTab !== 0) return;
     const params = { date: markDate, type };
@@ -78,13 +85,12 @@ const Attendance = () => {
     dispatch(getAttendance(params));
   }, [dispatch, mainTab, markDate, type, selectedBatch]);
 
+  // ── Build mark-attendance rows from enrolled students + existing logs ─────────
   useEffect(() => {
     if (mainTab !== 0) return;
     if (type === 'Student') {
       if (!selectedBatch) { setMarkRows([]); return; }
-      const batch = batches.find(b => b._id === selectedBatch);
-      const batchStudents = batch?.students || [];
-      setMarkRows(batchStudents.map(s => {
+      setMarkRows(enrolledStudents.map(s => {
         const ex = attendanceLogs.find(l => l.student?._id === s._id || l.student === s._id);
         return { student: s._id, name: s.name, info: s.studentId || s.email, status: ex?.status || 'Present', remarks: ex?.remarks || '', dbId: ex?._id };
       }));
@@ -94,7 +100,7 @@ const Attendance = () => {
         return { teacher: t._id, name: t.name, info: t.email, status: ex?.status || 'Present', remarks: ex?.remarks || '', dbId: ex?._id };
       }));
     }
-  }, [type, selectedBatch, batches, teachers, attendanceLogs, mainTab]);
+  }, [type, selectedBatch, enrolledStudents, teachers, attendanceLogs, mainTab]);
 
   const handleStatusChange = (idx, status) => setMarkRows(r => r.map((x, i) => i === idx ? { ...x, status } : x));
   const handleRemarksChange = (idx, v) => setMarkRows(r => r.map((x, i) => i === idx ? { ...x, remarks: v } : x));
@@ -250,7 +256,7 @@ const Attendance = () => {
               )}
             </Grid>
 
-            {loading && <LinearProgress sx={{ mb: 2 }} />}
+            {(loading || loadingStudents) && <LinearProgress sx={{ mb: 2 }} />}
 
             {markRows.length > 0 ? (
               <>
@@ -322,10 +328,17 @@ const Attendance = () => {
                   </Table>
                 </TableContainer>
               </>
+            ) : loadingStudents ? (
+              <Box sx={{ p: 4, textAlign: 'center' }}>
+                <CircularProgress size={32} />
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>Loading students…</Typography>
+              </Box>
             ) : (
-              <Alert severity="info" sx={{ borderRadius: 2 }}>
+              <Alert severity={type === 'Student' && !selectedBatch ? 'info' : selectedBatch && enrolledStudents.length === 0 ? 'warning' : 'info'} sx={{ borderRadius: 2 }}>
                 {type === 'Student' && !selectedBatch
                   ? 'Please select a batch to mark attendance.'
+                  : type === 'Student' && selectedBatch && enrolledStudents.length === 0
+                  ? 'No active students enrolled in this batch. Enroll students via the Enrollments page and assign them to this batch.'
                   : `No ${type === 'Teacher' ? 'teachers' : 'students'} found.`}
               </Alert>
             )}

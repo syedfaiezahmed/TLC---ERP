@@ -1,6 +1,7 @@
 import Batch from '../models/Batch.js';
 import Course from '../models/Course.js';
 import Student from '../models/Student.js';
+import StudentEnrollment from '../models/StudentEnrollment.js';
 
 // @desc    Get all batches for a company
 // @route   GET /api/batches
@@ -117,10 +118,31 @@ const deleteBatch = async (req, res) => {
   }
 };
 
+// @desc    Get actively enrolled students for a batch (from StudentEnrollment)
+// @route   GET /api/batches/:id/students
+// @access  Private
+const getBatchStudents = async (req, res) => {
+  try {
+    const enrollments = await StudentEnrollment.find({
+      batch: req.params.id,
+      company: req.user.company,
+      status: 'active',
+    })
+      .populate('student', 'name studentId email contact')
+      .lean();
+
+    const students = enrollments.map(e => e.student).filter(Boolean);
+    res.json(students);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 export {
   getBatches,
   getBatchById,
   createBatch,
   updateBatch,
-  deleteBatch
+  deleteBatch,
+  getBatchStudents,
 };

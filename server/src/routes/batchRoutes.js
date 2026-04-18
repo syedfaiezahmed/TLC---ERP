@@ -6,12 +6,15 @@ import {
   createBatch,
   updateBatch,
   deleteBatch,
+  getBatchStudents,
 } from '../controllers/batchController.js';
 import { protect } from '../middleware/authMiddleware.js';
 
 router.route('/')
   .get(protect, getBatches)
   .post(protect, createBatch);
+
+router.get('/:id/students', protect, getBatchStudents);
 
 router.route('/:id')
   .get(protect, getBatchById)
