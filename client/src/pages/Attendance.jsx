@@ -264,7 +264,7 @@ const Attendance = () => {
                   {['Present', 'Absent', 'Late', 'Excused'].map(s => (
                     <Button key={s} size="small" variant="outlined" color={STATUS_COLORS[s]}
                       onClick={() => handleMarkAll(s)}>
-                      All {s}
+                      All {type === 'Teacher' && s === 'Excused' ? 'NA' : s}
                     </Button>
                   ))}
                   <Box sx={{ flex: 1 }} />
@@ -302,7 +302,8 @@ const Attendance = () => {
                           <TableCell>
                             <RadioGroup row value={row.status} onChange={e => handleStatusChange(idx, e.target.value)}>
                               {Object.keys(STATUS_COLORS).map(s => (
-                                <FormControlLabel key={s} value={s} label={s}
+                                <FormControlLabel key={s} value={s}
+                                  label={type === 'Teacher' && s === 'Excused' ? 'NA' : s}
                                   control={<Radio size="small" color={STATUS_COLORS[s]} sx={{ p: 0.3 }} />}
                                   sx={{ mr: 1, '& .MuiFormControlLabel-label': { fontSize: 12 } }} />
                               ))}
