@@ -126,6 +126,11 @@ export const fetchMonthlyAttendanceRegister = (params) => API.get('/attendance/m
 export const fetchAttendanceReport = (params) => API.get('/attendance/report', { params });
 export const fetchAttendanceStats = (params) => API.get('/attendance/stats', { params });
 
+export const fetchClassLogs          = (companyId, date)   => API.get(`/class-logs/company/${companyId}`, { params: { date } });
+export const saveClassLogs           = (payload)           => API.post('/class-logs', payload);
+export const fetchMonthlyClassSummary= (companyId, month)  => API.get(`/class-logs/monthly/${companyId}`, { params: { month } });
+export const generatePayrollFromLogs = (companyId, month)  => API.post(`/class-logs/generate-payroll/${companyId}`, { month });
+
 export const fetchExams = () => API.get('/exams');
 export const fetchExam = (id) => API.get(`/exams/${id}`);
 export const createExam = (newExam) => API.post('/exams', newExam);

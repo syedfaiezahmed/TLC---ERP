@@ -20,8 +20,10 @@ import AssessmentIcon from '@mui/icons-material/Assessment';
 import SaveIcon from '@mui/icons-material/Save';
 import DeleteIcon from '@mui/icons-material/Delete';
 import DownloadIcon from '@mui/icons-material/Download';
+import WorkHistoryIcon from '@mui/icons-material/WorkHistory';
 import moment from 'moment';
 import { toast } from 'react-toastify';
+import ClassPayrollTab from './ClassPayrollTab';
 
 // ─── Status helpers ───────────────────────────────────────────────────────────
 const STATUS_COLORS = { Present: 'success', Absent: 'error', Late: 'warning', Excused: 'info' };
@@ -199,7 +201,7 @@ const Attendance = () => {
           <Grid item xs={12} sm={4}>
             <FormControl fullWidth size="small">
               <InputLabel>Type</InputLabel>
-              <Select value={type} label="Type" onChange={e => { setType(e.target.value); setSelectedBatch(''); }}>
+              <Select value={type} label="Type" onChange={e => { setType(e.target.value); setSelectedBatch(''); if (e.target.value === 'Student' && mainTab === 3) setMainTab(0); }}>
                 <MenuItem value="Student">Students</MenuItem>
                 <MenuItem value="Teacher">Teachers</MenuItem>
               </Select>
@@ -226,6 +228,8 @@ const Attendance = () => {
           <Tab icon={<EventAvailableIcon />} iconPosition="start" label="Mark Attendance" />
           <Tab icon={<CalendarMonthIcon />} iconPosition="start" label="Monthly Register" />
           <Tab icon={<AssessmentIcon />} iconPosition="start" label="Attendance Report" />
+          <Tab icon={<WorkHistoryIcon />} iconPosition="start" label="Class Payroll"
+            sx={{ display: type === 'Teacher' ? 'flex' : 'none' }} />
         </Tabs>
 
         {/* ══════ TAB 0: MARK ATTENDANCE ══════ */}
@@ -532,6 +536,10 @@ const Attendance = () => {
               </Alert>
             )}
           </Box>
+        )}
+        {/* ══════ TAB 3: CLASS PAYROLL ══════ */}
+        {mainTab === 3 && (
+          <ClassPayrollTab companyId={companyId} />
         )}
       </Paper>
     </Container>

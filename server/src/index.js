@@ -56,7 +56,9 @@ import badDebtRoutes from './routes/badDebtRoutes.js';
 import feeReportRoutes from './routes/feeReportRoutes.js';
 import pdfVoucherRoutes from './routes/pdfVoucherRoutes.js';
 import assetRoutes from './routes/assetRoutes.js';
+import teacherClassLogRoutes from './routes/teacherClassLogRoutes.js';
 import { scheduleBackups } from './controllers/backupController.js';
+
 
 // Load env vars - Already loaded at top
 // dotenv.config();
@@ -154,6 +156,7 @@ const routes = [
   { path: '/pdf-vouchers', handler: pdfVoucherRoutes },
   { path: '/payroll', handler: payrollRoutes },
   { path: '/assets', handler: assetRoutes },
+  { path: '/class-logs', handler: teacherClassLogRoutes },
 ];
 
 routes.forEach(route => {
