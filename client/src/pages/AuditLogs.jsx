@@ -3,7 +3,6 @@ import { useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
   Box,
-  CircularProgress,
   Table,
   TableBody,
   TableCell,
@@ -16,6 +15,7 @@ import {
   useTheme,
   alpha,
 } from '@mui/material';
+import { TableRowSkeleton } from '../components/SkeletonLoaders';
 import { Search as SearchIcon } from '@mui/icons-material';
 import moment from 'moment';
 import { fetchAuditLogs } from '../services/api';
@@ -89,11 +89,7 @@ const AuditLogs = () => {
             </TableHead>
             <TableBody>
               {loading ? (
-                <TableRow>
-                  <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
-                    <CircularProgress size={28} />
-                  </TableCell>
-                </TableRow>
+                <TableRowSkeleton rows={10} cols={5} />
               ) : filtered.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} align="center" sx={{ py: 6 }}>

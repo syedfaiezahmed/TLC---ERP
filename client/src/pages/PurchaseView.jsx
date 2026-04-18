@@ -4,7 +4,6 @@ import {
   Box,
   Button,
   CardContent,
-  CircularProgress,
   Divider,
   Grid,
   Table,
@@ -17,6 +16,7 @@ import {
   useTheme,
   alpha,
 } from '@mui/material';
+import { DialogContentSkeleton } from '../components/SkeletonLoaders';
 import { ArrowBack as ArrowBackIcon, Delete as DeleteIcon, Edit as EditIcon } from '@mui/icons-material';
 import moment from 'moment';
 import { toast } from 'react-toastify';
@@ -97,9 +97,7 @@ const PurchaseView = () => {
       />
 
       {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-          <CircularProgress />
-        </Box>
+        <DialogContentSkeleton rows={10} />
       ) : !purchase ? (
         <Typography color="text.secondary">Purchase not found.</Typography>
       ) : (

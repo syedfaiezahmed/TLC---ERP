@@ -16,7 +16,6 @@ import {
   TableRow,
   Button,
   Divider,
-  CircularProgress,
   Alert,
   Dialog,
   DialogTitle,
@@ -32,6 +31,7 @@ import {
   ListItem,
   ListItemText
 } from '@mui/material';
+import { PageTableSkeleton } from '../components/SkeletonLoaders';
 import DownloadIcon from '@mui/icons-material/Download';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import PaymentIcon from '@mui/icons-material/Payment';
@@ -144,7 +144,7 @@ const FeePreview = () => {
     }).format(amount || 0);
   };
 
-  if (loading) return <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh"><CircularProgress /></Box>;
+  if (loading) return <PageTableSkeleton cols={5} rows={10} />;
   if (error) return <Box p={3}><Alert severity="error">{error}</Alert></Box>;
   if (!currentFee) return <Box p={3}><Alert severity="info">Fee receipt not found</Alert></Box>;
 

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useParams } from 'react-router-dom';
+import { TableRowSkeleton } from '../components/SkeletonLoaders';
 import {
   Alert,
   Autocomplete,
@@ -326,11 +327,7 @@ const FeeRefunds = () => {
                 </TableHead>
                 <TableBody>
                   {loading ? (
-                    <TableRow>
-                      <TableCell colSpan={7} align="center" sx={{ py: 5 }}>
-                        <CircularProgress size={28} />
-                      </TableCell>
-                    </TableRow>
+                    <TableRowSkeleton rows={6} cols={7} />
                   ) : filteredRefunds.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={7} align="center" sx={{ py: 5 }}>
@@ -411,9 +408,13 @@ const FeeRefunds = () => {
             </Grid>
 
             {paymentsLoading ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', py: 5 }}>
-                <CircularProgress size={28} />
-              </Box>
+              <TableContainer>
+                <Table size="small">
+                  <TableBody>
+                    <TableRowSkeleton rows={6} cols={7} />
+                  </TableBody>
+                </Table>
+              </TableContainer>
             ) : !payStudent ? (
               <Box sx={{ py: 6, textAlign: 'center' }}>
                 <MoneyOffIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />

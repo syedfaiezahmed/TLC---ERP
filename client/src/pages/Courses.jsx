@@ -44,6 +44,7 @@ import CategoryIcon from '@mui/icons-material/Category';
 import DownloadIcon from '@mui/icons-material/Download';
 import TimerIcon from '@mui/icons-material/Timer';
 import StatCard from '../components/StatCard';
+import { StatCardGridSkeleton, TableRowSkeleton } from '../components/SkeletonLoaders';
 import { exportToExcel, exportToPDF } from '../utils/exportUtils';
 import moment from 'moment';
 
@@ -273,9 +274,7 @@ const Courses = () => {
       </Box>
 
     {loading && courses.length === 0 ? (
-        <Box display="flex" justifyContent="center" py={10}>
-            <CircularProgress />
-        </Box>
+        <StatCardGridSkeleton count={4} />
     ) : (
         <>
             <Grid container spacing={2}>
@@ -389,7 +388,9 @@ const Courses = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {filteredCourses.map((course) => (
+              {loading && filteredCourses.length === 0 ? (
+                <TableRowSkeleton rows={6} cols={7} />
+              ) : filteredCourses.map((course) => (
                 <TableRow key={course._id} hover>
                   <TableCell sx={{ py: 0.5 }}>
                       <StatusChip type={course.type} />

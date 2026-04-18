@@ -36,7 +36,6 @@ import {
   Tab,
   Autocomplete,
   TableContainer,
-  CircularProgress,
   InputAdornment,
   useTheme,
   alpha,
@@ -54,6 +53,7 @@ import {
   Badge,
   Snackbar
 } from '@mui/material';
+import { ReportSkeleton } from '../components/SkeletonLoaders';
 import {
   Search,
   Download,
@@ -80,7 +80,7 @@ import {
 import moment from 'moment';
 import StatCard from '../components/StatCard';
 
-const Reports = () => {
+const FeeReports = () => {
   const dispatch = useDispatch();
   const theme = useTheme();
   const { companyId } = useParams();
@@ -627,19 +627,15 @@ const Reports = () => {
         )}
 
         {/* Loading Overlay */}
-        <Backdrop open={currentLoading} sx={{ position: 'absolute', zIndex: 1 }}>
-          <Fade in={currentLoading}>
-            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <CircularProgress size={60} />
-              <Typography variant="h6" sx={{ mt: 2 }}>
-                Loading report data...
-              </Typography>
-            </Box>
-          </Fade>
-        </Backdrop>
+        {currentLoading && (
+          <Box sx={{ p: 3 }}>
+            <ReportSkeleton />
+          </Box>
+        )}
 
         {/* Tab Content */}
-        <Box sx={{ p: 3, position: 'relative' }}>
+        {!currentLoading && (
+          <Box sx={{ p: 3, position: 'relative' }}>
           {/* TAB 0: Fee Collection Report */}
           {tabValue === 0 && (
             <Box>
@@ -1261,9 +1257,10 @@ const Reports = () => {
             </Box>
           )}
         </Box>
-      </Paper>
-    </Container>
+      )}
+  </Paper>
+</Container>
   );
 };
 
-export default Reports;
+export default FeeReports;

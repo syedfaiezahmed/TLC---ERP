@@ -25,11 +25,11 @@ import {
   InputAdornment,
   useTheme,
   alpha,
-  CircularProgress,
   Grid,
   Stack,
-  Tooltip
+  Tooltip,
 } from '@mui/material';
+import { TableRowSkeleton } from '../components/SkeletonLoaders';
 import {
   Add as AddIcon,
   Search as SearchIcon,
@@ -310,11 +310,7 @@ const Purchases = () => {
             </TableHead>
             <TableBody>
               {loading ? (
-                <TableRow>
-                  <TableCell colSpan={8} align="center" sx={{ py: 5 }}>
-                    <CircularProgress size={30} />
-                  </TableCell>
-                </TableRow>
+                <TableRowSkeleton rows={8} cols={8} />
               ) : filteredPurchases.length > 0 ? (
                 filteredPurchases.map((purchase) => (
                   <TableRow key={purchase._id} hover>

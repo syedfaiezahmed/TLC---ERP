@@ -2,12 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { 
-  getStudents, 
-  createStudent, 
-  updateStudent, 
-  deleteStudent 
-} from '../redux/studentSlice';
+import { getStudents, createStudent, updateStudent, deleteStudent } from '../redux/studentSlice';
+import { TableRowSkeleton } from '../components/SkeletonLoaders';
 import { getGroups } from '../redux/groupSlice';
 import * as api from '../services/api';
 import {
@@ -388,11 +384,7 @@ const Students = () => {
           </TableHead>
           <TableBody>
             {loading ? (
-                <TableRow>
-                  <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
-                    <CircularProgress size={30} />
-                  </TableCell>
-                </TableRow>
+                <TableRowSkeleton rows={8} cols={6} />
             ) : students && students.length > 0 ? (
               students.filter(s => filterGroup === 'all' || (s.group?._id || s.group) === filterGroup).map((student) => (
                 <TableRow key={student._id} hover sx={{ '&:last-child td, &:last-child th': { border: 0 }, transition: 'background-color 0.2s' }}>

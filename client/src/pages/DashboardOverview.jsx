@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import {
-    Grid, Typography, Box, Card, CardContent, CircularProgress,
-    Button, alpha, IconButton, Stack, LinearProgress, Tooltip,
-    Menu, MenuItem, Chip, Divider
+import { 
+    Grid, Typography, Box, Card, CardContent,
+    Button, Stack, alpha, useTheme, Chip, IconButton, Tooltip,
+    Avatar, Paper, Divider,
 } from '@mui/material';
+import { AppShellSkeleton } from '../components/SkeletonLoaders';
 import {
     BarChart, Bar, AreaChart, Area,
     XAxis, YAxis, CartesianGrid,
@@ -194,14 +195,7 @@ const DashboardOverview = () => {
     const efficiency = (((summary?.totalRevenue || 0) / Math.max((summary?.totalRevenue || 0) + (summary?.totalReceivables || 0), 1)) * 100).toFixed(1);
     const hasOverdue = (summary?.totalReceivables || 0) > 0;
 
-    if (loading) {
-        return (
-            <Box display="flex" flexDirection="column" justifyContent="center" alignItems="center" minHeight="60vh" gap={2}>
-                <CircularProgress size={44} thickness={4} sx={{ color: B.primary }} />
-                <Typography variant="body2" sx={{ color: B.sub }}>Loading dashboard...</Typography>
-            </Box>
-        );
-    }
+    if (loading) return <AppShellSkeleton />;
 
     // ── Action row ───────────────────────────────────────────────────────────
     const ActionRow = ({ icon, iconColor, label, desc, onClick, badge }) => (

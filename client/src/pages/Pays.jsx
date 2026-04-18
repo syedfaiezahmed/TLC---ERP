@@ -19,7 +19,6 @@ import {
   InputAdornment,
   useTheme,
   alpha,
-  CircularProgress,
   Button,
   Dialog,
   DialogTitle,
@@ -31,8 +30,11 @@ import {
   Divider,
   MenuItem,
   Stack,
-  Chip
+  Chip,
+  IconButton,
+  Tooltip,
 } from '@mui/material';
+import { TableRowSkeleton } from '../components/SkeletonLoaders';
 import {
   Add as AddIcon,
   Search as SearchIcon,
@@ -44,8 +46,6 @@ import {
   AccountBalance as AccountBalanceIcon,
   Delete as DeleteIcon,
 } from '@mui/icons-material';
-import IconButton from '@mui/material/IconButton';
-import Tooltip from '@mui/material/Tooltip';
 import moment from 'moment';
 import { toast } from 'react-toastify';
 import StatCard from '../components/StatCard';
@@ -366,11 +366,7 @@ const Pays = () => {
             </TableHead>
             <TableBody>
               {loading ? (
-                <TableRow>
-                  <TableCell colSpan={8} align="center" sx={{ py: 5 }}>
-                    <CircularProgress size={30} />
-                  </TableCell>
-                </TableRow>
+                <TableRowSkeleton rows={8} cols={8} />
               ) : filteredPayments.length > 0 ? (
                 filteredPayments.map((pmt, i) => (
                   <TableRow key={pmt._id || i} hover>

@@ -31,6 +31,8 @@ import {
   Search as SearchIcon,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
+import { exportToExcel, exportToPDF } from '../utils/exportUtils';
+import { TableRowSkeleton } from '../components/SkeletonLoaders';
 import { clearAccountsError, createAccount, deleteAccount, getAccounts, updateAccount } from '../redux/accountSlice';
 import PageHeader from '../components/ui/PageHeader';
 import SectionCard from '../components/ui/SectionCard';
@@ -155,11 +157,7 @@ const ChartOfAccounts = () => {
             </TableHead>
             <TableBody>
               {loading ? (
-                <TableRow>
-                  <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
-                    <CircularProgress size={28} />
-                  </TableCell>
-                </TableRow>
+                <TableRowSkeleton rows={6} cols={5} />
               ) : filtered.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} align="center" sx={{ py: 6 }}>

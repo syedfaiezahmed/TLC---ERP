@@ -1,11 +1,12 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { Routes, Route, useParams } from 'react-router-dom';
-import { Box, Toolbar, CircularProgress } from '@mui/material';
+import { Box, Toolbar } from '@mui/material';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchCurrentCompany } from '../redux/companySlice';
 
 import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
+import { AppShellSkeleton, SuspenseFallback } from '../components/SkeletonLoaders';
 
 // Lazy Load Components
 const Students = lazy(() => import('./Students'));
@@ -43,11 +44,7 @@ const Enquiries = lazy(() => import('./Enquiries'));
 const FeeManagement = lazy(() => import('./FeeManagement'));
 const EnrollmentManagement = lazy(() => import('./EnrollmentManagement'));
 
-const LoadingFallback = () => (
-  <Box display="flex" justifyContent="center" alignItems="center" height="200px">
-    <CircularProgress size={32} thickness={4} />
-  </Box>
-);
+const LoadingFallback = () => <SuspenseFallback />;
 
 const drawerWidth = 240;
 
@@ -70,11 +67,7 @@ const Dashboard = () => {
   }, []);
 
   if (loading && companies.length === 0) {
-      return (
-          <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
-              <CircularProgress />
-          </Box>
-      );
+      return <AppShellSkeleton />;
   }
 
   return (

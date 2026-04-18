@@ -38,6 +38,7 @@ import {
   OutlinedInput
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
+import { TableRowSkeleton } from '../components/SkeletonLoaders';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import GroupsIcon from '@mui/icons-material/Groups';
@@ -176,7 +177,9 @@ const Batches = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {filteredBatches.map((batch) => (
+              {loading && filteredBatches.length === 0 ? (
+                <TableRowSkeleton rows={5} cols={7} />
+              ) : filteredBatches.map((batch) => (
                 <TableRow key={batch._id} hover>
                   <TableCell fontWeight={600}>{batch.name}</TableCell>
                   <TableCell>{batch.course?.name || 'N/A'}</TableCell>

@@ -14,6 +14,7 @@ import {
   Radio, CircularProgress, Alert, Stack, Avatar, Tabs, Tab,
   Chip, Tooltip, IconButton, LinearProgress,
 } from '@mui/material';
+import { TableRowSkeleton } from '../components/SkeletonLoaders';
 import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import AssessmentIcon from '@mui/icons-material/Assessment';
@@ -334,10 +335,13 @@ const Attendance = () => {
                 </TableContainer>
               </>
             ) : loadingStudents ? (
-              <Box sx={{ p: 4, textAlign: 'center' }}>
-                <CircularProgress size={32} />
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>Loading students…</Typography>
-              </Box>
+              <TableContainer>
+                <Table size="small">
+                  <TableBody>
+                    <TableRowSkeleton rows={8} cols={5} />
+                  </TableBody>
+                </Table>
+              </TableContainer>
             ) : (
               <Alert severity={type === 'Student' && !selectedBatch ? 'info' : selectedBatch && enrolledStudents.length === 0 ? 'warning' : 'info'} sx={{ borderRadius: 2 }}>
                 {type === 'Student' && !selectedBatch

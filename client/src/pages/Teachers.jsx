@@ -10,6 +10,7 @@ import {
   InputAdornment, Avatar, Card, useTheme, alpha, CircularProgress,
   Chip, MenuItem, Select, FormControl, InputLabel, Divider, Tooltip, Grid,
 } from '@mui/material';
+import { TableRowSkeleton } from '../components/SkeletonLoaders';
 import {
   Add as AddIcon, Search as SearchIcon, Edit as EditIcon,
   Delete as DeleteIcon, School as SchoolIcon, Warning as WarningIcon,
@@ -167,7 +168,7 @@ const Teachers = () => {
             </TableHead>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4 }}><CircularProgress /></TableCell></TableRow>
+                <TableRowSkeleton rows={6} cols={6} />
               ) : filtered.map(t => {
                 const monthly = t.annualSalary > 0 ? t.annualSalary / 12 : (t.fixedSalary || 0);
                 return (

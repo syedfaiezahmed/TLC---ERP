@@ -39,6 +39,7 @@ import {
   Tabs
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
+import { TableRowSkeleton } from '../components/SkeletonLoaders';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import SaveIcon from '@mui/icons-material/Save';
@@ -208,7 +209,9 @@ const Exams = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {exams.map((exam) => (
+              {loading ? (
+                <TableRowSkeleton rows={5} cols={6} />
+              ) : exams.map((exam) => (
                 <TableRow key={exam._id} hover>
                   <TableCell fontWeight={600}>{exam.title}</TableCell>
                   <TableCell>{moment(exam.date).format('DD MMM YYYY')}</TableCell>
