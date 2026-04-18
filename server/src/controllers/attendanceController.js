@@ -191,7 +191,7 @@ const getAttendanceReport = async (req, res) => {
           as: lookupAs,
         }
       },
-      { $unwind: { path: `$${lookupAs}`, preserveNullAndEmpty: true } },
+      { $unwind: { path: `$${lookupAs}`, preserveNullAndEmptyArrays: true } },
       {
         $project: {
           name:       { $ifNull: [`$${lookupAs}.name`, 'Unknown'] },

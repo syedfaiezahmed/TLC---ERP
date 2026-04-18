@@ -66,7 +66,7 @@ const Attendance = () => {
   useEffect(() => {
     if (companyId) {
       dispatch(getBatches(companyId));
-      dispatch(getTeachers(companyId));
+      dispatch(getTeachers({ companyId }));
     }
   }, [dispatch, companyId]);
 

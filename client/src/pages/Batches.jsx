@@ -72,7 +72,7 @@ const Batches = () => {
     if (companyId) {
       dispatch(getBatches(companyId));
       dispatch(getCourses(companyId));
-      dispatch(getTeachers(companyId));
+      dispatch(getTeachers({ companyId }));
     }
   }, [dispatch, companyId]);
 
