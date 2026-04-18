@@ -8,6 +8,7 @@ import {
   updateStudent, 
   deleteStudent 
 } from '../redux/studentSlice';
+import { getGroups } from '../redux/groupSlice';
 import {
   Box,
   Button,
@@ -67,9 +68,11 @@ const Students = () => {
   
   const { selectedCompany } = useSelector((state) => state.companies);
   const { students, loading, total, pages } = useSelector((state) => state.students);
+  const { groups } = useSelector((state) => state.groups);
   
   const [open, setOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterGroup, setFilterGroup] = useState('all');
   const [currentPage, setCurrentPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   
@@ -87,12 +90,14 @@ const Students = () => {
     guardianInfo: '',
     emergencyContact: '',
     status: 'Active',
+    groupId: '',
     openingBalance: ''
   });
 
   useEffect(() => {
     const id = companyId || selectedCompany?._id;
     if (id) {
+      dispatch(getGroups(id));
       dispatch(getStudents({
           companyId: id,
           page: currentPage + 1,
@@ -132,6 +137,7 @@ const Students = () => {
         guardianInfo: student.guardianInfo || '',
         emergencyContact: student.emergencyContact || '',
         status: student.status || 'Active',
+        groupId: student.group?._id || student.group || '',
         openingBalance: '' 
       });
     } else {
@@ -149,6 +155,7 @@ const Students = () => {
         guardianInfo: '',
         emergencyContact: '',
         status: 'Active',
+        groupId: '',
         openingBalance: ''
       });
     }
@@ -292,29 +299,36 @@ const Students = () => {
       {/* Search and Filter Section */}
       <Card sx={{ mb: 2, borderRadius: 3, overflow: 'visible', border: 'none', boxShadow: theme.shadows[1] }}>
         <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-          <Box display="flex" alignItems="center" gap={2}>
-            <TextField
-              fullWidth
-              size="small"
-              placeholder="Search students by name, email, or contact..."
-              value={searchTerm}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon color="action" fontSize="small" />
-                  </InputAdornment>
-                ),
-                sx: { borderRadius: 2, bgcolor: 'background.default' }
-              }}
-              variant="outlined"
-            />
-            <Tooltip title="Filter options">
-              <IconButton size="small" sx={{ bgcolor: alpha(theme.palette.primary.main, 0.1), color: 'primary.main', p: 1, borderRadius: 2, '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.2) } }}>
-                <FilterListIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          </Box>
+          <Grid container spacing={2} alignItems="center">
+            <Grid item xs={12} md={8}>
+              <TextField
+                fullWidth size="small"
+                placeholder="Search students by name, email, or contact..."
+                value={searchTerm}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                InputProps={{
+                  startAdornment: (<InputAdornment position="start"><SearchIcon color="action" fontSize="small" /></InputAdornment>),
+                  sx: { borderRadius: 2, bgcolor: 'background.default' }
+                }}
+                variant="outlined"
+              />
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <TextField
+                select fullWidth size="small" value={filterGroup}
+                onChange={(e) => setFilterGroup(e.target.value)}
+                InputProps={{ sx: { borderRadius: 2, bgcolor: 'background.default' } }}
+              >
+                <MenuItem value="all">All Groups</MenuItem>
+                {(groups || []).map((g) => (
+                  <MenuItem key={g._id} value={g._id}>
+                    <Box component="span" sx={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', bgcolor: g.color || 'primary.main', mr: 1 }} />
+                    {g.name}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+          </Grid>
         </CardContent>
       </Card>
 
@@ -325,6 +339,7 @@ const Students = () => {
             <TableRow>
               <TableCell sx={{ py: 1, fontWeight: 700, color: 'text.secondary', borderBottom: 'none' }}>Student Details</TableCell>
               <TableCell sx={{ py: 1, fontWeight: 700, color: 'text.secondary', borderBottom: 'none' }}>Contact Info</TableCell>
+              <TableCell sx={{ py: 1, fontWeight: 700, color: 'text.secondary', borderBottom: 'none', display: { xs: 'none', md: 'table-cell' } }}>Group</TableCell>
               <TableCell sx={{ py: 1, fontWeight: 700, color: 'text.secondary', borderBottom: 'none', display: { xs: 'none', md: 'table-cell' } }}>Location</TableCell>
               <TableCell sx={{ py: 1, fontWeight: 700, color: 'text.secondary', borderBottom: 'none' }} align="right">Actions</TableCell>
             </TableRow>
@@ -332,12 +347,12 @@ const Students = () => {
           <TableBody>
             {loading ? (
                 <TableRow>
-                  <TableCell colSpan={4} align="center" sx={{ py: 4 }}>
+                  <TableCell colSpan={5} align="center" sx={{ py: 4 }}>
                     <CircularProgress size={30} />
                   </TableCell>
                 </TableRow>
             ) : students && students.length > 0 ? (
-              students.map((student) => (
+              students.filter(s => filterGroup === 'all' || (s.group?._id || s.group) === filterGroup).map((student) => (
                 <TableRow key={student._id} hover sx={{ '&:last-child td, &:last-child th': { border: 0 }, transition: 'background-color 0.2s' }}>
                   <TableCell sx={{ py: 0.5 }}>
                     <Box display="flex" alignItems="center" gap={1.5}>
@@ -385,6 +400,15 @@ const Students = () => {
                     </Box>
                   </TableCell>
                   <TableCell sx={{ py: 0.5, display: { xs: 'none', md: 'table-cell' } }}>
+                    {student.group ? (
+                      <Chip
+                        label={student.group.name || student.group.code}
+                        size="small"
+                        sx={{ fontWeight: 600, borderRadius: 1, bgcolor: `${student.group.color || '#1976d2'}22`, color: student.group.color || 'primary.main' }}
+                      />
+                    ) : <Typography variant="caption" color="text.disabled">—</Typography>}
+                  </TableCell>
+                  <TableCell sx={{ py: 0.5, display: { xs: 'none', md: 'table-cell' } }}>
                     <Box display="flex" alignItems="flex-start" gap={1}>
                       <LocationOnIcon fontSize="small" sx={{ color: 'text.secondary', fontSize: 14, mt: 0.2 }} />
                       <Typography variant="caption" color="text.primary" sx={{ maxWidth: 200, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -430,7 +454,7 @@ const Students = () => {
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={4} align="center" sx={{ py: 6 }}>
+                <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
                   <Box display="flex" flexDirection="column" alignItems="center" gap={1}>
                     <PersonIcon sx={{ fontSize: 48, color: 'text.disabled', opacity: 0.5 }} />
                     <Typography variant="subtitle1" color="text.secondary">No students found</Typography>
@@ -598,6 +622,25 @@ const Students = () => {
                   <MenuItem value="Inactive">Inactive</MenuItem>
                   <MenuItem value="Completed">Completed</MenuItem>
                   <MenuItem value="Dropped">Dropped</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <FormControl fullWidth>
+                <InputLabel>Academic Group</InputLabel>
+                <Select
+                  name="groupId"
+                  value={formData.groupId}
+                  label="Academic Group"
+                  onChange={handleChange}
+                >
+                  <MenuItem value="">— No Group —</MenuItem>
+                  {(groups || []).map((g) => (
+                    <MenuItem key={g._id} value={g._id}>
+                      <Box component="span" sx={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', bgcolor: g.color || 'primary.main', mr: 1, verticalAlign: 'middle' }} />
+                      {g.name}
+                    </MenuItem>
+                  ))}
                 </Select>
               </FormControl>
             </Grid>

@@ -23,6 +23,7 @@ import feeManagementReducer from './feeManagementSlice';
 import enrollmentReducer from './enrollmentSlice';
 import assetReducer from './assetSlice';
 import payrollReducer from './payrollSlice';
+import groupReducer from './groupSlice';
 
 export const store = configureStore({
   reducer: {
@@ -50,5 +51,6 @@ export const store = configureStore({
     enrollments: enrollmentReducer,
     assets: assetReducer,
     payroll: payrollReducer,
+    groups: groupReducer,
   },
 });

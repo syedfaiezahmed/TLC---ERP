@@ -50,6 +50,7 @@ import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import GroupsIcon from '@mui/icons-material/Groups';
+import LayersIcon from '@mui/icons-material/Layers';
 
 const Sidebar = React.memo(({ mobileOpen, handleDrawerToggle }) => {
   const { companyId } = useParams();
@@ -83,6 +84,7 @@ const Sidebar = React.memo(({ mobileOpen, handleDrawerToggle }) => {
         { type: 'divider' },
         { text: 'ACADEMICS', type: 'header' },
         { text: 'Enquiries', icon: <ContactSupportIcon />, path: `/company/${companyId}/enquiries`, roles: ['superadmin', 'admin'] },
+        { text: 'Groups', icon: <LayersIcon />, path: `/company/${companyId}/groups`, roles: ['superadmin', 'admin'] },
         { text: 'Courses', icon: <AutoStoriesIcon />, path: `/company/${companyId}/courses`, roles: ['superadmin', 'admin', 'teacher'] },
         { text: 'Batches', icon: <GroupsIcon />, path: `/company/${companyId}/batches`, roles: ['superadmin', 'admin', 'teacher'] },
         { text: 'Attendance', icon: <EventAvailableIcon />, path: `/company/${companyId}/attendance`, roles: ['superadmin', 'admin', 'teacher'] },

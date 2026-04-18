@@ -33,6 +33,7 @@ import ledgerRoutes from './routes/ledgerRoutes.js';
 import backupRoutes from './routes/backupRoutes.js';
 import reportRoutes from './routes/reportRoutes.js';
 import courseRoutes from './routes/courseRoutes.js';
+import groupRoutes from './routes/groupRoutes.js';
 import expenseRoutes from './routes/expenseRoutes.js';
 import expenseCategoryRoutes from './routes/expenseCategoryRoutes.js';
 import teacherRoutes from './routes/teacherRoutes.js';
@@ -130,6 +131,7 @@ const routes = [
   { path: '/backup', handler: backupRoutes },
   { path: '/reports', handler: reportRoutes },
   { path: '/courses', handler: courseRoutes },
+  { path: '/groups', handler: groupRoutes },
   { path: '/expenses', handler: expenseRoutes },
   { path: '/expense-categories', handler: expenseCategoryRoutes },
   { path: '/teachers', handler: teacherRoutes },

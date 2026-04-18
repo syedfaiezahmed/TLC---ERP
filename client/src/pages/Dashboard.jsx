@@ -18,6 +18,7 @@ const Reports = lazy(() => import('./Reports'));
 const FeeReports = lazy(() => import('./FeeReports'));
 const Backup = lazy(() => import('./Backup'));
 const Courses = lazy(() => import('./Courses'));
+const Groups = lazy(() => import('./Groups'));
 const Expenses = lazy(() => import('./Expenses'));
 const Teachers = lazy(() => import('./Teachers'));
 const Purchases = lazy(() => import('./Purchases'));
@@ -97,6 +98,7 @@ const Dashboard = () => {
             <Route path="students" element={<Students />} />
             <Route path="enquiries" element={<Enquiries />} />
             <Route path="courses" element={<Courses />} />
+            <Route path="groups" element={<Groups />} />
             <Route path="batches" element={<Batches />} />
             <Route path="attendance" element={<Attendance />} />
             <Route path="exams" element={<Exams />} />

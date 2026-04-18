@@ -80,6 +80,12 @@ const studentSchema = mongoose.Schema(
       required: true,
       ref: 'Company',
     },
+    // Optional primary academic group (e.g. Pre-Engineering, Pre-Medical, Commerce)
+    group: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Group',
+      index: true,
+    },
   },
   {
     timestamps: true,

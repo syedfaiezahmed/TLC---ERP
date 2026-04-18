@@ -23,7 +23,8 @@ const createStudent = async (req, res) => {
       guardianInfo, 
       emergencyContact,
       status,
-      companyId, 
+      companyId,
+      groupId,
       openingBalance 
     } = req.body;
 
@@ -46,6 +47,7 @@ const createStudent = async (req, res) => {
       emergencyContact,
       status,
       company: companyId,
+      group: groupId || undefined,
     });
 
     const createdStudent = await student.save();
@@ -124,6 +126,7 @@ const getStudents = async (req, res) => {
     // Run count and data fetch in parallel
     const [students, total] = await Promise.all([
         Student.find(query)
+            .populate('group', 'name code color level')
             .sort({ name: 1 })
             .skip(skip)
             .limit(limitNum)
@@ -147,7 +150,7 @@ const getStudents = async (req, res) => {
 // @access  Private/Admin
 const getStudentById = async (req, res) => {
   try {
-    const student = await Student.findById(req.params.id).populate('company');
+    const student = await Student.findById(req.params.id).populate('company').populate('group', 'name code color level');
 
     if (!student) return res.status(404).json({ message: 'Student not found' });
     if (!canAccessCompany(req.user, student.company)) return res.status(401).json({ message: 'Not authorized to view this student' });
@@ -174,7 +177,8 @@ const updateStudent = async (req, res) => {
       motherName,
       guardianInfo, 
       emergencyContact,
-      status
+      status,
+      groupId
     } = req.body;
 
     const student = await Student.findById(req.params.id).populate('company');
@@ -195,6 +199,7 @@ const updateStudent = async (req, res) => {
     student.guardianInfo = guardianInfo || student.guardianInfo;
     student.emergencyContact = emergencyContact || student.emergencyContact;
     student.status = status || student.status;
+    if (groupId !== undefined) student.group = groupId || undefined;
 
     const updatedStudent = await student.save();
     try { await logAudit({ req, companyId: student.company._id, action: 'update', entityType: 'student', entityId: student._id, before, after: updatedStudent }); } catch(_) {}

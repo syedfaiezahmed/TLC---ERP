@@ -67,6 +67,12 @@ export const createCourse = (newCourse) => API.post('/courses', newCourse);
 export const updateCourse = (id, updatedCourse) => API.put(`/courses/${id}`, updatedCourse);
 export const deleteCourse = (id) => API.delete(`/courses/${id}`);
 
+export const fetchGroups = (companyId) => API.get(`/groups/company/${companyId}`);
+export const createGroup = (data) => API.post('/groups', data);
+export const updateGroup = (id, data) => API.put(`/groups/${id}`, data);
+export const deleteGroup = (id) => API.delete(`/groups/${id}`);
+export const seedDefaultGroups = (companyId) => API.post(`/groups/seed-defaults/${companyId}`);
+
 export const fetchDashboardSummary = (companyId) => API.get(`/reports/dashboard/${companyId}`);
 export const fetchDashboardChartData = (companyId) => API.get(`/reports/chart/${companyId}`);
 export const fetchStudentStatement = (companyId, params) => API.get(`/reports/statement/${companyId}`, { params });

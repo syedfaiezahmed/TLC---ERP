@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useParams } from 'react-router-dom';
 import { getCourses, createCourse, updateCourse, deleteCourse } from '../redux/courseSlice';
+import { getGroups } from '../redux/groupSlice';
 import {
   Container,
   Paper,
@@ -76,11 +77,12 @@ const StatusChip = ({ type }) => {
 };
 
 const Courses = () => {
-  const [formData, setFormData] = useState({ name: '', description: '', fee: '', code: '', duration: '', type: 'course', teacherId: '' });
+  const [formData, setFormData] = useState({ name: '', description: '', fee: '', code: '', duration: '', type: 'course', teacherId: '', groupId: '' });
   const [currentId, setCurrentId] = useState(null);
   const [open, setOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
+  const [filterGroup, setFilterGroup] = useState('all');
   const [actionLoading, setActionLoading] = useState(false);
   
   const dispatch = useDispatch();
@@ -88,12 +90,14 @@ const Courses = () => {
   const { courses, loading } = useSelector((state) => state.courses);
   const { selectedCompany } = useSelector((state) => state.companies);
   const { teachers } = useSelector((state) => state.teachers);
+  const { groups } = useSelector((state) => state.groups);
   const { companyId } = useParams(); 
   const currentCompanyId = companyId || selectedCompany?._id;
 
   useEffect(() => {
     if (currentCompanyId) {
       dispatch(getCourses(currentCompanyId));
+      dispatch(getGroups(currentCompanyId));
     }
   }, [dispatch, currentCompanyId]); 
 
@@ -120,7 +124,7 @@ const Courses = () => {
 
   const clear = () => {
     setCurrentId(null);
-    setFormData({ name: '', description: '', fee: '', code: '', duration: '', type: 'course', teacherId: '' });
+    setFormData({ name: '', description: '', fee: '', code: '', duration: '', type: 'course', teacherId: '', groupId: '' });
   };
 
   const handleEdit = (course) => {
@@ -132,7 +136,8 @@ const Courses = () => {
       code: course.code,
       duration: course.duration,
       type: course.type || 'course',
-      teacherId: course.teacher?._id || course.teacher || ''
+      teacherId: course.teacher?._id || course.teacher || '',
+      groupId: course.group?._id || course.group || ''
     });
     setOpen(true);
   };
@@ -148,12 +153,12 @@ const Courses = () => {
           const matchesSearch = 
               course.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
               (course.code && course.code.toLowerCase().includes(searchTerm.toLowerCase()));
-          
-          if (filterType !== 'all') return matchesSearch && course.type === filterType;
-          
-          return matchesSearch;
+          const matchesType = filterType === 'all' || course.type === filterType;
+          const matchesGroup = filterGroup === 'all' ||
+              (course.group?._id || course.group) === filterGroup;
+          return matchesSearch && matchesType && matchesGroup;
       });
-  }, [courses, searchTerm, filterType]);
+  }, [courses, searchTerm, filterType, filterGroup]);
 
   const stats = useMemo(() => {
       const totalCourses = (courses || []).length;
@@ -338,26 +343,33 @@ const Courses = () => {
                         size="small"
                     />
                 </Grid>
-                <Grid item xs={12} md={3}>
+                <Grid item xs={6} md={2}>
                     <TextField
-                        select
-                        fullWidth
-                        value={filterType}
+                        select fullWidth value={filterType}
                         onChange={(e) => setFilterType(e.target.value)}
                         size="small"
-                        InputProps={{
-                            startAdornment: (
-                                <InputAdornment position="start">
-                                    <FilterListIcon color="action" fontSize="small" />
-                                </InputAdornment>
-                            ),
-                            sx: { borderRadius: 2, bgcolor: 'white' }
-                        }}
+                        InputProps={{ startAdornment: (<InputAdornment position="start"><FilterListIcon color="action" fontSize="small" /></InputAdornment>), sx: { borderRadius: 2, bgcolor: 'white' } }}
                     >
                         <MenuItem value="all">All Types</MenuItem>
                         <MenuItem value="course">Course</MenuItem>
                         <MenuItem value="workshop">Workshop</MenuItem>
                         <MenuItem value="session">Session</MenuItem>
+                    </TextField>
+                </Grid>
+                <Grid item xs={6} md={3}>
+                    <TextField
+                        select fullWidth value={filterGroup}
+                        onChange={(e) => setFilterGroup(e.target.value)}
+                        size="small"
+                        InputProps={{ sx: { borderRadius: 2, bgcolor: 'white' } }}
+                    >
+                        <MenuItem value="all">All Groups</MenuItem>
+                        {(groups || []).map((g) => (
+                            <MenuItem key={g._id} value={g._id}>
+                                <Box component="span" sx={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', bgcolor: g.color || 'primary.main', mr: 1 }} />
+                                {g.name}
+                            </MenuItem>
+                        ))}
                     </TextField>
                 </Grid>
             </Grid>
@@ -369,6 +381,7 @@ const Courses = () => {
               <TableRow>
                 <TableCell sx={{ fontWeight: 700, py: 1, color: 'text.secondary', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: 1 }}>Type</TableCell>
                 <TableCell sx={{ fontWeight: 700, py: 1, color: 'text.secondary', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: 1 }}>Course Details</TableCell>
+                <TableCell sx={{ fontWeight: 700, py: 1, color: 'text.secondary', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: 1 }}>Group</TableCell>
                 <TableCell sx={{ fontWeight: 700, py: 1, color: 'text.secondary', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: 1 }}>Duration</TableCell>
                 <TableCell sx={{ fontWeight: 700, py: 1, color: 'text.secondary', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: 1 }}>Teacher</TableCell>
                 <TableCell align="right" sx={{ fontWeight: 700, py: 1, color: 'text.secondary', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: 1 }}>Fee (PKR)</TableCell>
@@ -390,6 +403,15 @@ const Courses = () => {
                               Code: {course.code || '-'}
                           </Typography>
                       </Box>
+                  </TableCell>
+                  <TableCell sx={{ py: 0.5 }}>
+                      {course.group ? (
+                          <Chip
+                              label={course.group.name || course.group.code}
+                              size="small"
+                              sx={{ fontWeight: 600, borderRadius: 1, bgcolor: `${course.group.color || '#1976d2'}22`, color: course.group.color || 'primary.main' }}
+                          />
+                      ) : <Typography variant="caption" color="text.disabled">—</Typography>}
                   </TableCell>
                   <TableCell sx={{ py: 0.5 }}>
                       <Typography variant="body2" fontSize="0.875rem">
@@ -442,7 +464,7 @@ const Courses = () => {
               ))}
               {filteredCourses.length === 0 && (
                   <TableRow>
-                      <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
+                      <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
                           <Box display="flex" flexDirection="column" alignItems="center" gap={2}>
                               <BookIcon sx={{ fontSize: 48, color: 'text.disabled' }} />
                               <Typography variant="subtitle1" color="text.secondary">
@@ -540,13 +562,10 @@ const Courses = () => {
                         }}
                     />
                 </Grid>
-                <Grid item xs={12}>
+                <Grid item xs={12} sm={6}>
                     <TextField
-                        select
-                        name="teacherId"
-                        label="Assigned Teacher"
-                        fullWidth
-                        size="small"
+                        select name="teacherId" label="Assigned Teacher"
+                        fullWidth size="small"
                         value={formData.teacherId}
                         onChange={(e) => setFormData({ ...formData, teacherId: e.target.value })}
                         variant="outlined"
@@ -554,6 +573,23 @@ const Courses = () => {
                         <MenuItem value="">Unassigned</MenuItem>
                         {teachers.map((t) => (
                             <MenuItem key={t._id} value={t._id}>{t.name}</MenuItem>
+                        ))}
+                    </TextField>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                    <TextField
+                        select name="groupId" label="Academic Group"
+                        fullWidth size="small"
+                        value={formData.groupId}
+                        onChange={(e) => setFormData({ ...formData, groupId: e.target.value })}
+                        variant="outlined"
+                    >
+                        <MenuItem value="">— No Group —</MenuItem>
+                        {(groups || []).map((g) => (
+                            <MenuItem key={g._id} value={g._id}>
+                                <Box component="span" sx={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', bgcolor: g.color || 'primary.main', mr: 1, verticalAlign: 'middle' }} />
+                                {g.name}
+                            </MenuItem>
                         ))}
                     </TextField>
                 </Grid>

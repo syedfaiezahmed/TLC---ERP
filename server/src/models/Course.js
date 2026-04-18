@@ -36,6 +36,12 @@ const courseSchema = mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Teacher',
     },
+    // Optional academic group (Pre-Eng, Pre-Med, Commerce, etc.)
+    group: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Group',
+      index: true,
+    },
   },
   {
     timestamps: true,

@@ -31,8 +31,9 @@ const getCourses = async (req, res) => {
 
     const [courses, total] = await Promise.all([
         Course.find(query)
-          .select('name code fee duration type teacher')
+          .select('name code fee duration type teacher group description')
           .populate('teacher', 'name')
+          .populate('group', 'name code color level')
           .sort({ name: 1 })
           .skip(skip)
           .limit(limitNum)
@@ -56,7 +57,7 @@ const getCourses = async (req, res) => {
 // @access  Private/Admin
 const createCourse = async (req, res) => {
   try {
-    const { companyId, name, type, description, fee, code, duration, teacherId } = req.body;
+    const { companyId, name, type, description, fee, code, duration, teacherId, groupId } = req.body;
 
     const company = await Company.findById(companyId);
     if (!company) return res.status(404).json({ message: 'Company not found' });
@@ -70,7 +71,8 @@ const createCourse = async (req, res) => {
       fee,
       code,
       duration,
-      teacher: teacherId,
+      teacher: teacherId || undefined,
+      group: groupId || undefined,
     });
 
     const createdCourse = await course.save();
@@ -86,7 +88,7 @@ const createCourse = async (req, res) => {
 // @access  Private/Admin
 const updateCourse = async (req, res) => {
   try {
-    const { name, type, description, fee, code, duration, teacherId } = req.body;
+    const { name, type, description, fee, code, duration, teacherId, groupId } = req.body;
     const course = await Course.findById(req.params.id).populate('company');
 
     if (!course) return res.status(404).json({ message: 'Course not found' });
@@ -99,7 +101,8 @@ const updateCourse = async (req, res) => {
     if (fee !== undefined) course.fee = fee;
     course.code = code || course.code;
     course.duration = duration || course.duration;
-    course.teacher = teacherId || course.teacher;
+    if (teacherId !== undefined) course.teacher = teacherId || undefined;
+    if (groupId !== undefined) course.group = groupId || undefined;
 
     const updatedCourse = await course.save();
     try { await logAudit({ req, companyId: course.company._id, action: 'update', entityType: 'course', entityId: course._id, before, after: updatedCourse }); } catch(_) {}
