@@ -48,7 +48,7 @@ export const postJournal = async (meta, lines) => {
   });
 
   if (Number(totalDebit.toFixed(2)) !== Number(totalCredit.toFixed(2))) {
-    if (Math.abs(totalDebit - totalCredit) < 0.05) {
+    if (Math.abs(totalDebit - totalCredit) < 0.01) {
         const diff = totalDebit - totalCredit;
         const lastDoc = docs[docs.length - 1];
         if (diff > 0) {

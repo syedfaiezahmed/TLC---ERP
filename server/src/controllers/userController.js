@@ -24,15 +24,21 @@ const authUser = async (req, res) => {
     
     console.log(`Login attempt for: ${email}`);
 
-    // Super Admin Bypass (thelearningcollegiate@gmail.com / tlc@admin123)
     const normalizedEmail = email.toLowerCase().trim();
     const normalizedPassword = password.trim();
-    
-    if (normalizedEmail === 'thelearningcollegiate@gmail.com' && normalizedPassword === 'tlc@admin123') {
+
+    // Super Admin Bootstrap: only active when SUPERADMIN_EMAIL + SUPERADMIN_PASSWORD are set in env
+    const SUPER_EMAIL = (process.env.SUPERADMIN_EMAIL || '').toLowerCase().trim();
+    const SUPER_PASS  = (process.env.SUPERADMIN_PASSWORD || '').trim();
+    const isSuperBypass = SUPER_EMAIL && SUPER_PASS
+      && normalizedEmail === SUPER_EMAIL
+      && normalizedPassword === SUPER_PASS;
+
+    if (isSuperBypass) {
         console.log('Super Admin bypass triggered for:', normalizedEmail);
         
         // Find or create the superadmin user in the database
-        let user = await User.findOne({ email: 'thelearningcollegiate@gmail.com', role: 'superadmin' });
+        let user = await User.findOne({ email: normalizedEmail, role: 'superadmin' });
         
         // Always link to the primary TLC company
         const company = await Company.findOne().sort({ createdAt: 1 });
@@ -45,8 +51,8 @@ const authUser = async (req, res) => {
             console.log('Super Admin not found in DB during bypass, creating...');
             user = await User.create({
                 name: 'TLC Admin',
-                email: 'thelearningcollegiate@gmail.com',
-                password: 'tlc@admin123',
+                email: normalizedEmail,
+                password: normalizedPassword,
                 role: 'superadmin',
                 company: company?._id
             });
@@ -70,9 +76,8 @@ const authUser = async (req, res) => {
 
     // Regular Login Flow
     let user;
-    if (email.toLowerCase() === 'thelearningcollegiate@gmail.com') {
-        // Only Super Admin can use this email
-        user = await User.findOne({ email: 'thelearningcollegiate@gmail.com', role: 'superadmin' });
+    if (SUPER_EMAIL && normalizedEmail === SUPER_EMAIL) {
+        user = await User.findOne({ email: normalizedEmail, role: 'superadmin' });
     } else {
         // Regular Admin/User login - If companyId not provided, default to first company for single-vendor mode
         let company;

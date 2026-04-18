@@ -387,8 +387,18 @@ const recordPayment = async (req, res) => {
       return res.status(403).json({ message: lockErr.message });
     }
 
-    const payAmount = Number(amount);
+    const payAmount  = Number(amount);
     const discAmount = Number(discount || 0);
+
+    if (!payAmount || payAmount <= 0 || !isFinite(payAmount)) {
+      return res.status(400).json({ message: 'Payment amount must be a positive number' });
+    }
+    if (discAmount < 0 || !isFinite(discAmount)) {
+      return res.status(400).json({ message: 'Discount amount cannot be negative' });
+    }
+    if (payAmount + discAmount > fee.balanceDue + 0.01) {
+      return res.status(400).json({ message: `Payment (${payAmount}) + discount (${discAmount}) exceeds balance due (${fee.balanceDue})` });
+    }
 
     await postFeePaymentJournal({
         companyId: fee.company._id,
@@ -498,13 +508,17 @@ const deletePayment = async (req, res) => {
             await assertPeriodOpen(fee.company._id, payment.date);
 
             // Reverse logic
-            fee.paidAmount -= payment.amount;
-            fee.writeOffAmount -= (payment.discount || 0);
+            fee.paidAmount     = Math.max(0, (fee.paidAmount || 0) - payment.amount);
+            fee.writeOffAmount = Math.max(0, (fee.writeOffAmount || 0) - (payment.discount || 0));
             fee.payments.splice(paymentIndex, 1);
-            
-            fee.balanceDue = fee.totalAmount - fee.paidAmount - fee.writeOffAmount;
+
+            fee.balanceDue = Math.max(0, Number((
+              fee.totalAmount - fee.paidAmount - fee.writeOffAmount
+              - (fee.refundAmount || 0) - (fee.creditNoteAmount || 0)
+            ).toFixed(2)));
             if (fee.balanceDue <= 0.01) {
                 fee.status = 'paid';
+                fee.balanceDue = 0;
             } else if (fee.paidAmount > 0) {
                 fee.status = 'partial';
             } else {

@@ -18,9 +18,10 @@ teacherClassLogSchema.index({ company: 1, teacher: 1, date: 1, batch: 1 }, { uni
 teacherClassLogSchema.index({ company: 1, date: 1 });
 teacherClassLogSchema.index({ company: 1, teacher: 1, date: 1 });
 
-const TeacherClassLog = mongoose.model('TeacherClassLog', teacherClassLogSchema);
-export default TeacherClassLog;
-
+// Backup hooks must be registered BEFORE mongoose.model()
 teacherClassLogSchema.post('save', function (doc) { if (doc?.company) queueCompanyBackupEvent(doc.company); });
 teacherClassLogSchema.post('findOneAndUpdate', function (doc) { if (doc?.company) queueCompanyBackupEvent(doc.company); });
 teacherClassLogSchema.post('findOneAndDelete', function (doc) { if (doc?.company) queueCompanyBackupEvent(doc.company); });
+
+const TeacherClassLog = mongoose.model('TeacherClassLog', teacherClassLogSchema);
+export default TeacherClassLog;

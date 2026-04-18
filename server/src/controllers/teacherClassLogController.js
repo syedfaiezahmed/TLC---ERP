@@ -216,25 +216,13 @@ const generatePayrollFromLogs = async (req, res) => {
     const start = new Date(yr, mo - 1, 1);
     const end   = new Date(yr, mo, 0, 23, 59, 59, 999);
 
-    // Re-use summary aggregation
-    const summaryReq = { params: { companyId }, query: { month }, user: req.user };
-    const summaryRes = {
-      json: data => data,
-      status: () => ({ json: e => { throw new Error(e.message); } }),
-    };
-
-    const summary = await (async () => {
-      const [yr2, mo2] = month.split('-').map(Number);
-      const s2 = new Date(yr2, mo2 - 1, 1);
-      const e2 = new Date(yr2, mo2, 0, 23, 59, 59, 999);
-      return TeacherClassLog.aggregate([
-        { $match: { company: new mongoose.Types.ObjectId(companyId), date: { $gte: s2, $lte: e2 } } },
-        { $group: { _id: { teacher: '$teacher', course: '$course' }, classCount: { $sum: 1 }, ratePerClass: { $first: '$ratePerClass' }, amount: { $sum: '$ratePerClass' } } },
-        { $lookup: { from: 'courses', localField: '_id.course', foreignField: '_id', as: 'courseInfo' } },
-        { $unwind: { path: '$courseInfo', preserveNullAndEmptyArrays: true } },
-        { $group: { _id: '$_id.teacher', breakdown: { $push: { course: '$_id.course', courseName: { $ifNull: ['$courseInfo.name', 'Unknown'] }, classCount: '$classCount', ratePerClass: '$ratePerClass', amount: '$amount' } }, totalClasses: { $sum: '$classCount' }, totalAmount: { $sum: '$amount' } } },
-      ]);
-    })();
+    const summary = await TeacherClassLog.aggregate([
+      { $match: { company: new mongoose.Types.ObjectId(companyId), date: { $gte: start, $lte: end } } },
+      { $group: { _id: { teacher: '$teacher', course: '$course' }, classCount: { $sum: 1 }, ratePerClass: { $first: '$ratePerClass' }, amount: { $sum: '$ratePerClass' } } },
+      { $lookup: { from: 'courses', localField: '_id.course', foreignField: '_id', as: 'courseInfo' } },
+      { $unwind: { path: '$courseInfo', preserveNullAndEmptyArrays: true } },
+      { $group: { _id: '$_id.teacher', breakdown: { $push: { course: '$_id.course', courseName: { $ifNull: ['$courseInfo.name', 'Unknown'] }, classCount: '$classCount', ratePerClass: '$ratePerClass', amount: '$amount' } }, totalClasses: { $sum: '$classCount' }, totalAmount: { $sum: '$amount' } } },
+    ]);
 
     const monthDate = new Date(yr, mo - 1, 1);
     let created = 0, updated = 0;

@@ -10,6 +10,12 @@ import Ledger from '../models/Ledger.js';
  * @param {string} [teacherId] - Optional: Recalculate only for a specific teacher (usually for AP)
  */
 const recalculateLedger = async (companyId, studentId = null, accountName = null, teacherId = null) => {
+    if (!companyId) throw new Error('recalculateLedger: companyId is required');
+    if (!studentId && !accountName && !teacherId) {
+        // Calling with no filter would mix all accounts and produce a meaningless balance
+        throw new Error('recalculateLedger: at least one of studentId, accountName, or teacherId is required');
+    }
+
     let query = { company: companyId };
     
     // If specific student, we usually care about their Accounts Receivable history

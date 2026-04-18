@@ -109,11 +109,16 @@ class FeeCalculationService {
 
     const lateFeeAmount = fee.lateFeeRule?.amount || 200;
 
-    // Update fee with late fee
+    // Correct formula: (subTotal - cashDiscount) + taxAmount + lateFee
+    const taxableAmount  = Math.max(0, (fee.subTotal || 0) - (fee.cashDiscount || 0));
+    const recalcTaxAmt   = (taxableAmount * (fee.taxRate || 0)) / 100;
+
+    // Update fee with late fee — preserve tax and discount
     fee.lateFeeApplied = true;
-    fee.lateFeeAmount = lateFeeAmount;
-    fee.totalAmount = fee.subTotal + lateFeeAmount;
-    fee.balanceDue = fee.totalAmount - fee.paidAmount;
+    fee.lateFeeAmount  = lateFeeAmount;
+    fee.taxAmount      = Number(recalcTaxAmt.toFixed(2));
+    fee.totalAmount    = Number((taxableAmount + fee.taxAmount + lateFeeAmount).toFixed(2));
+    fee.balanceDue     = Math.max(0, Number((fee.totalAmount - (fee.paidAmount || 0) - (fee.writeOffAmount || 0) - (fee.refundAmount || 0)).toFixed(2)));
     await fee.save();
 
     return {
@@ -151,10 +156,12 @@ class FeeCalculationService {
         discount: discountAmount
       });
 
-      // Update fee totals
+      // Update fee totals — recalculate tax after discount change
       fee.cashDiscount += discountAmount;
-      fee.totalAmount = Math.max(0, fee.subTotal - fee.cashDiscount + fee.lateFeeAmount);
-      fee.balanceDue = Math.max(0, fee.totalAmount - fee.paidAmount);
+      const taxableBase   = Math.max(0, (fee.subTotal || 0) - (fee.cashDiscount || 0));
+      fee.taxAmount       = Number(((taxableBase * (fee.taxRate || 0)) / 100).toFixed(2));
+      fee.totalAmount     = Math.max(0, Number((taxableBase + fee.taxAmount + (fee.lateFeeAmount || 0)).toFixed(2)));
+      fee.balanceDue      = Math.max(0, Number((fee.totalAmount - (fee.paidAmount || 0) - (fee.writeOffAmount || 0) - (fee.refundAmount || 0)).toFixed(2)));
 
       await fee.save({ session });
 
