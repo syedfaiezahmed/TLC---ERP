@@ -2,12 +2,11 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useParams } from 'react-router-dom';
 import {
-  Alert, Autocomplete, Box, Button, Chip, Container, Divider,
+  Alert, Autocomplete, Box, Button, Chip, CircularProgress, Container, Divider,
   FormControl, Grid, InputLabel, MenuItem, Paper, Select, Stack, Tab, Table,
   TableBody, TableCell, TableContainer, TableHead, TableRow, Tabs, TextField,
   Typography, alpha, useTheme,
 } from '@mui/material';
-import { ReportSkeleton } from '../components/SkeletonLoaders';
 import moment from 'moment';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import PrintIcon from '@mui/icons-material/Print';
@@ -231,7 +230,12 @@ const Reports = () => {
         </Box>
 
         <Box sx={{ p: 3 }}>
-          {loading && <ReportSkeleton />}
+          {loading && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 6, gap: 2 }}>
+              <CircularProgress />
+              <Typography variant="body2" color="text.secondary">Loading report…</Typography>
+            </Box>
+          )}
           {!loading && reportError && (
             <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}
               action={<Button size="small" onClick={runReport}>Retry</Button>}>

@@ -2,9 +2,7 @@ import React, { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import PrivateRoute from './components/PrivateRoute';
 import ErrorBoundary from './components/ErrorBoundary';
-import { CssBaseline, ThemeProvider, Box } from '@mui/material';
-import { AppShellSkeleton } from './components/SkeletonLoaders';
-import { useSelector } from 'react-redux';
+import { CssBaseline, ThemeProvider, CircularProgress, Box } from '@mui/material';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import theme from './theme';
@@ -42,7 +40,13 @@ const Login = lazy(() => lazyRetry(() => import('./pages/Login')));
 const Dashboard = lazy(() => lazyRetry(() => import('./pages/Dashboard')));
 const Expenses = lazy(() => lazyRetry(() => import('./pages/Expenses')));
 
-const LoadingFallback = () => <AppShellSkeleton />;
+const LoadingFallback = () => (
+  <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', bgcolor: 'background.default' }}>
+    <CircularProgress color="primary" />
+  </Box>
+);
+
+import { useSelector } from 'react-redux';
 
 const RootRedirect = () => {
   const authData = useSelector((state) => state.auth.authData);

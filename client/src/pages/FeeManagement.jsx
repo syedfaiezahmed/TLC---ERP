@@ -9,10 +9,9 @@ import {
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   Chip, IconButton, Dialog, DialogTitle, DialogContent, DialogActions,
   FormControl, InputLabel, Select, MenuItem, Autocomplete, Alert, Snackbar,
-  LinearProgress, Divider, Stack, Card, CardContent,
+  CircularProgress, LinearProgress, Divider, Stack, Card, CardContent,
   ToggleButton, ToggleButtonGroup, Tooltip, Badge, alpha,
 } from '@mui/material';
-import { DialogContentSkeleton, TableRowSkeleton } from '../components/SkeletonLoaders';
 import { useTheme } from '@mui/material/styles';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import PaymentIcon from '@mui/icons-material/Payment';
@@ -1424,7 +1423,7 @@ const FeeManagement = () => {
                 </Button>
               </Box>
             </Box>
-          ) : <DialogContentSkeleton rows={4} />}
+          ) : <Box p={3} textAlign="center"><CircularProgress /></Box>}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => {

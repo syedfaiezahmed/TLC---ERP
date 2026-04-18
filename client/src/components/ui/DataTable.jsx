@@ -15,10 +15,10 @@ import {
   Chip,
   alpha,
   useTheme,
+  CircularProgress,
   TextField,
   InputAdornment
 } from '@mui/material';
-import { TableRowSkeleton } from '../SkeletonLoaders';
 import SearchIcon from '@mui/icons-material/Search';
 import FilterListIcon from '@mui/icons-material/FilterList';
 
@@ -115,7 +115,11 @@ const DataTable = ({
           </TableHead>
           <TableBody>
             {loading ? (
-              <TableRowSkeleton rows={rowsPerPage} cols={columns.length + (actions ? 1 : 0)} />
+              <TableRow>
+                <TableCell colSpan={columns.length + (actions ? 1 : 0)} align="center" sx={{ py: 8 }}>
+                  <CircularProgress size={32} thickness={4} />
+                </TableCell>
+              </TableRow>
             ) : data.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={columns.length + (actions ? 1 : 0)} align="center" sx={{ py: 8 }}>

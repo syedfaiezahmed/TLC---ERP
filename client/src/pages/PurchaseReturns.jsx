@@ -4,6 +4,7 @@ import { useParams } from 'react-router-dom';
 import {
   Box,
   Button,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -25,7 +26,6 @@ import {
   Autocomplete,
   Tooltip,
 } from '@mui/material';
-import { TableRowSkeleton } from '../components/SkeletonLoaders';
 import { Add as AddIcon, Delete as DeleteIcon, Search as SearchIcon, ReceiptLong as ReceiptLongIcon } from '@mui/icons-material';
 import moment from 'moment';
 import { toast } from 'react-toastify';
@@ -230,7 +230,11 @@ const PurchaseReturns = () => {
             </TableHead>
             <TableBody>
               {loading ? (
-                <TableRowSkeleton rows={8} cols={7} />
+                <TableRow>
+                  <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
+                    <CircularProgress size={28} />
+                  </TableCell>
+                </TableRow>
               ) : filteredReturns.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} align="center" sx={{ py: 6 }}>

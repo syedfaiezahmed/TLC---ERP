@@ -17,9 +17,9 @@ import {
   DialogTitle, 
   DialogContent, 
   DialogActions, 
-  TextField
+  TextField,
+  CircularProgress
 } from '@mui/material';
-import { PageTableSkeleton } from '../components/SkeletonLoaders';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import LockIcon from '@mui/icons-material/Lock';
@@ -86,7 +86,7 @@ const UserManagement = () => {
     }
   };
 
-  if (loading) return <PageTableSkeleton cols={6} rows={8} />;
+  if (loading) return <Box display="flex" justifyContent="center" p={5}><CircularProgress /></Box>;
 
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>

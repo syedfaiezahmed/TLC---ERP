@@ -7,10 +7,9 @@ import {
 import {
   Box, Typography, Button, Card, CardContent, Grid, Table, TableBody,
   TableCell, TableHead, TableRow, TableContainer, IconButton, Chip,
-  TextField, Dialog, DialogTitle, DialogContent,
+  CircularProgress, TextField, Dialog, DialogTitle, DialogContent,
   DialogActions, Divider, Alert, Stack, Tooltip, LinearProgress, alpha, useTheme,
 } from '@mui/material';
-import { TableRowSkeleton, PageTableSkeleton } from '../components/SkeletonLoaders';
 import {
   Add as AddIcon, Delete as DeleteIcon, Refresh as RefreshIcon,
   TrendingDown as TrendingDownIcon, Inventory as InventoryIcon,
@@ -142,7 +141,13 @@ const Assets = () => {
     }
   };
 
-  if (loading && assets.length === 0) return <PageTableSkeleton cols={7} rows={8} />;
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ p: { xs: 2, md: 4 } }}>

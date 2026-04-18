@@ -23,6 +23,7 @@ import {
   useTheme,
   alpha,
   Chip,
+  CircularProgress,
   Stack,
   Button,
   Dialog,
@@ -37,7 +38,6 @@ import {
   IconButton,
   Tooltip
 } from '@mui/material';
-import { TableRowSkeleton } from '../components/SkeletonLoaders';
 import AddIcon from '@mui/icons-material/Add';
 import SearchIcon from '@mui/icons-material/Search';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -392,6 +392,7 @@ const Payments = () => {
 
       {/* Table */}
       <TableContainer component={Paper} elevation={0} sx={{ borderRadius: 4, border: '1px solid', borderColor: 'divider', overflow: 'hidden' }}>
+          {loading && <CircularProgress sx={{ m: 2 }} />}
           <Table>
               <TableHead sx={{ bgcolor: alpha(theme.palette.primary.main, 0.05) }}>
                   <TableRow>
@@ -405,37 +406,34 @@ const Payments = () => {
                   </TableRow>
               </TableHead>
               <TableBody>
-                  {loading ? (
-                      <TableRowSkeleton rows={8} cols={7} />
-                  ) : filteredPayments.length > 0 ? (
-                      filteredPayments.map((payment) => (
-                          <TableRow key={payment._id} hover>
-                              <TableCell>{moment(payment.date).format('DD MMM YYYY')}</TableCell>
-                              <TableCell>
-                                  <Typography variant="body2" fontWeight={600}>{payment.student?.name || 'Unknown'}</Typography>
-                                  <Typography variant="caption" color="text.secondary">{payment.student?.phone}</Typography>
-                              </TableCell>
-                              <TableCell>
-                                  <Typography variant="body2">{payment.description}</Typography>
-                              </TableCell>
-                              <TableCell>
-                                  <Chip label={payment.reference || 'N/A'} size="small" variant="outlined" sx={{ borderRadius: 1 }} />
-                              </TableCell>
-                              <TableCell align="right" sx={{ fontWeight: 700, color: 'success.main' }}>
-                                  {formatCurrency(payment.cashReceived)}
-                              </TableCell>
-                              <TableCell align="right" sx={{ color: 'text.secondary' }}>
-                                  {payment.discount > 0 ? formatCurrency(payment.discount) : '-'}
-                              </TableCell>
-                              <TableCell align="center">
-                                  <Stack direction="row" spacing={1} justifyContent="center">
-                                      {/* <IconButton size="small" onClick={() => handleEditClick(payment)}><EditIcon fontSize="inherit" /></IconButton> */}
-                                      <IconButton size="small" color="error" onClick={() => handleDeleteClick(payment._id)}><DeleteIcon fontSize="inherit" /></IconButton>
-                                  </Stack>
-                              </TableCell>
-                          </TableRow>
-                      ))
-                  ) : (
+                  {filteredPayments.map((payment) => (
+                      <TableRow key={payment._id} hover>
+                          <TableCell>{moment(payment.date).format('DD MMM YYYY')}</TableCell>
+                          <TableCell>
+                              <Typography variant="body2" fontWeight={600}>{payment.student?.name || 'Unknown'}</Typography>
+                              <Typography variant="caption" color="text.secondary">{payment.student?.phone}</Typography>
+                          </TableCell>
+                          <TableCell>
+                              <Typography variant="body2">{payment.description}</Typography>
+                          </TableCell>
+                          <TableCell>
+                              <Chip label={payment.reference || 'N/A'} size="small" variant="outlined" sx={{ borderRadius: 1 }} />
+                          </TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 700, color: 'success.main' }}>
+                              {formatCurrency(payment.cashReceived)}
+                          </TableCell>
+                          <TableCell align="right" sx={{ color: 'text.secondary' }}>
+                              {payment.discount > 0 ? formatCurrency(payment.discount) : '-'}
+                          </TableCell>
+                          <TableCell align="center">
+                              <Stack direction="row" spacing={1} justifyContent="center">
+                                  {/* <IconButton size="small" onClick={() => handleEditClick(payment)}><EditIcon fontSize="inherit" /></IconButton> */}
+                                  <IconButton size="small" color="error" onClick={() => handleDeleteClick(payment._id)}><DeleteIcon fontSize="inherit" /></IconButton>
+                              </Stack>
+                          </TableCell>
+                      </TableRow>
+                  ))}
+                  {filteredPayments.length === 0 && !loading && (
                       <TableRow>
                           <TableCell colSpan={7} align="center" sx={{ py: 5 }}>
                               <Typography color="text.secondary">No payment records found for this period.</Typography>

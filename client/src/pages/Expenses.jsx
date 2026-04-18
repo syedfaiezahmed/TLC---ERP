@@ -26,11 +26,9 @@ import {
   alpha,
   useTheme,
   Avatar,
-  Snackbar,
-  Stack,
-  Tooltip
+  CircularProgress,
+  Snackbar
 } from '@mui/material';
-import { TableRowSkeleton } from '../components/SkeletonLoaders';
 import {
   Add as AddIcon,
   Delete as DeleteIcon,
@@ -330,7 +328,11 @@ const Expenses = () => {
             </TableHead>
             <TableBody>
               {loading ? (
-                <TableRowSkeleton rows={8} cols={7} />
+                <TableRow>
+                  <TableCell colSpan={6} align="center" sx={{ py: 8 }}>
+                    <CircularProgress size={30} />
+                  </TableCell>
+                </TableRow>
               ) : filteredExpenses.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} align="center" sx={{ py: 8 }}>

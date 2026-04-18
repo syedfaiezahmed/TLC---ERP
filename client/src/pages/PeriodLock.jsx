@@ -1,8 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { Box, Button, CardContent, Divider, TextField, Typography } from '@mui/material';
-import { DialogContentSkeleton } from '../components/SkeletonLoaders';
+import { Box, Button, CardContent, Divider, TextField, Typography, CircularProgress } from '@mui/material';
 import { clearPeriodLock, fetchPeriodLock, setPeriodLock } from '../services/api';
 import PageHeader from '../components/ui/PageHeader';
 import SectionCard from '../components/ui/SectionCard';
@@ -66,10 +65,12 @@ const PeriodLock = () => {
         subtitle="Lock posting up to a date so no back-dated vouchers can be posted."
       />
 
-      <SectionCard title="Current Lock Settings">
+      <SectionCard>
         <CardContent sx={{ p: 3 }}>
           {loading ? (
-            <DialogContentSkeleton rows={3} />
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
+              <CircularProgress />
+            </Box>
           ) : (
             <>
               <TextField

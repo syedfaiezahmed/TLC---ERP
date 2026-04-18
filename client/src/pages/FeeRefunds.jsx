@@ -408,13 +408,9 @@ const FeeRefunds = () => {
             </Grid>
 
             {paymentsLoading ? (
-              <TableContainer>
-                <Table size="small">
-                  <TableBody>
-                    <TableRowSkeleton rows={6} cols={7} />
-                  </TableBody>
-                </Table>
-              </TableContainer>
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 5 }}>
+                <CircularProgress size={28} />
+              </Box>
             ) : !payStudent ? (
               <Box sx={{ py: 6, textAlign: 'center' }}>
                 <MoneyOffIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />

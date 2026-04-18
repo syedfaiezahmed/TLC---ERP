@@ -23,8 +23,8 @@ import {
   TableContainer,
   alpha,
   InputAdornment,
+  CircularProgress,
 } from '@mui/material';
-import { DialogContentSkeleton } from '../components/SkeletonLoaders';
 import { Delete as DeleteIcon, Add as AddIcon, Save as SaveIcon, ArrowBack as ArrowBackIcon } from '@mui/icons-material';
 import { getTeachers } from '../redux/teacherSlice';
 import { getCourses } from '../redux/courseSlice';
@@ -167,11 +167,13 @@ const EditPurchase = () => {
     }
   };
 
-  if (loading) return (
-    <Box sx={{ p: 4 }}>
-      <DialogContentSkeleton rows={10} />
-    </Box>
-  );
+  if (loading) {
+    return (
+      <Box sx={{ p: 4, display: 'flex', justifyContent: 'center', py: 10 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ p: 4 }}>

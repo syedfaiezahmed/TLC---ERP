@@ -12,7 +12,6 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions, Divider, Alert, Stack,
   Tooltip, MenuItem, Select, FormControl, InputLabel, useTheme, alpha,
 } from '@mui/material';
-import { PayrollTableSkeleton } from '../components/SkeletonLoaders';
 import {
   Add as AddIcon, CheckCircle as ApproveIcon, Payment as PayIcon,
   Delete as DeleteIcon, Print as PrintIcon, Refresh as RefreshIcon,
@@ -391,7 +390,7 @@ const Payroll = () => {
 
       {/* Payroll Table */}
       {loading ? (
-        <PayrollTableSkeleton rows={8} />
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}><CircularProgress /></Box>
       ) : payrolls.length === 0 ? (
         <Card sx={{ borderRadius: 3, textAlign: 'center', py: 8 }}>
           <SalaryIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
