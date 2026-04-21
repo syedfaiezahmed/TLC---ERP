@@ -1,7 +1,7 @@
 import FeePayment from '../models/FeePayment.js';
 import Fee from '../models/Fee.js';
 import FeeVoucher from '../models/FeeVoucher.js';
-import { postFeeCollectionJournal, postFeePaymentRefundJournal, postFeePaymentJournal } from './journalService.js';
+import { postFeeCollectionJournal, postFeePaymentRefundJournal, postFeePaymentJournal, postFeeJournal } from './journalService.js';
 import { forceHealVoucherStatuses } from './voucherHealService.js';
 
 class FeeCollectionService {
@@ -83,11 +83,21 @@ class FeeCollectionService {
             lateFeeRule: { amount: voucher.lateFeeAmount || 200, gracePeriodDays: 0 },
           });
           await fee.save();
+          // Post accrual journal: Dr AR / Cr Fee Revenue
+          await postFeeJournal({
+            companyId,
+            studentId: voucher.student,
+            fee,
+            date: new Date(),
+            totalAmount: voucher.totalFee,
+            subTotal: voucher.totalFee,
+            taxAmount: 0,
+            cogs: 0,
+          });
           // Link back to voucher
           voucher.fee = fee._id;
-          console.log('[FeeCollection] Auto-created fee record:', fee._id);
+          console.log('[FeeCollection] Auto-created fee record with accrual journal:', fee._id);
         } catch (feeErr) {
-          // Non-fatal: proceed without fee record if auto-create fails
           console.error('[FeeCollection] Fee auto-create failed (non-fatal):', feeErr.message);
           fee = null;
         }

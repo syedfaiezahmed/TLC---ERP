@@ -89,19 +89,17 @@ const createFee = async (req, res) => {
     const createdFee = await fee.save();
     try { await logAudit({ req, companyId, action: 'create', entityType: 'fee', entityId: createdFee._id, before: null, after: createdFee }); } catch(_) {}
 
-    // Post journal non-blocking — fee is saved regardless
-    try {
-      await postFeeJournal({
-          companyId,
-          studentId,
-          fee: createdFee,
-          date,
-          totalAmount,
-          subTotal: taxableAmount,
-          taxAmount,
-          cogs: 0
-      });
-    } catch(jErr) { console.error('[createFee] journal error:', jErr.message); }
+    // Post accrual journal: Dr AR / Cr Fee Revenue
+    await postFeeJournal({
+        companyId,
+        studentId,
+        fee: createdFee,
+        date,
+        totalAmount,
+        subTotal: taxableAmount,
+        taxAmount,
+        cogs: 0
+    });
 
     // If marked as PAID on creation, post payment journal
     if (status === 'paid') {

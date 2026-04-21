@@ -268,85 +268,38 @@ const getRevenueDetailReport = async (req, res) => {
 
         const groupedData = {};
 
-        // ── 1. Old Fee system — embedded cash payments only (de-duplicated vs voucher system) ─
-        // CA RULE: Fee Income is recognised on COLLECTION (cash basis), not on invoicing.
-        // We use Fee.payments[] for fees paid via the legacy direct-payment path.
-        // Fees that were collected via the FeeVoucher/FeePayment system are excluded
-        // here to avoid double-counting (they appear in Source 2 below).
+        // ── 1. Old Fee model (fee receipts) ──────────────────────────────────
+        const feeQuery = { company: companyId };
+        if (dateFilter.$gte) feeQuery.date = dateFilter;
+        if (studentId) feeQuery.student = studentId;
 
-        // Get all fee _ids already covered by the voucher payment system
-        const voucherLinkedFeeIds = await FeePayment.distinct('fee', {
-            company: companyId,
-            fee: { $ne: null },
-        });
-        const voucherLinkedFeeSet = new Set(voucherLinkedFeeIds.map(id => id.toString()));
-
-        // Fetch fees with embedded payments that are NOT covered by the voucher system
-        const legacyFeeQuery = { company: companyId, 'payments.0': { $exists: true } };
-        if (studentId) legacyFeeQuery.student = studentId;
-
-        const feesWithPayments = await Fee.find(legacyFeeQuery)
-            .select('feeNumber date payments student')
+        const fees = await Fee.find(feeQuery)
+            .select('feeNumber date items student totalAmount')
             .populate('student', 'name')
             .sort({ date: 1 })
             .lean();
 
-        for (const fee of feesWithPayments) {
+        for (const fee of fees) {
             if (!fee.student) continue;
-            if (voucherLinkedFeeSet.has(fee._id.toString())) continue; // covered by Source 2
             const sid = fee.student._id.toString();
             if (!groupedData[sid]) groupedData[sid] = { studentName: fee.student.name, items: [], totalQty: 0, totalAmount: 0 };
-            for (const pmt of (fee.payments || [])) {
-                const pmtDate = new Date(pmt.date);
-                if (dateFilter.$gte && (pmtDate < dateFilter.$gte || pmtDate > dateFilter.$lte)) continue;
-                const amount = Number(pmt.amount || 0);
-                groupedData[sid].totalQty += 1;
-                groupedData[sid].totalAmount += amount;
+            for (const item of (fee.items || [])) {
+                groupedData[sid].totalQty += (item.quantity || 1);
+                groupedData[sid].totalAmount += (item.amount || 0);
                 groupedData[sid].items.push({
-                    _id: `fee_pmt_${fee._id}_${pmt._id}`,
+                    _id: `${fee._id}_${item._id}`,
                     type: 'Fee Receipt',
-                    date: pmtDate,
+                    date: fee.date,
                     num: fee.feeNumber,
-                    item: `Payment — Fee #${fee.feeNumber}`,
-                    qty: 1,
-                    price: amount,
-                    amount,
+                    item: item.description || 'Course Fee',
+                    qty: item.quantity || 1,
+                    price: item.price || 0,
+                    amount: item.amount || 0,
                 });
             }
         }
 
-        // ── 2. New FeePayment model (voucher-based collections) ──────────────
-        const payQuery = { company: companyId, status: 'active' };
-        if (dateFilter.$gte) payQuery.paymentDate = dateFilter;
-        if (studentId) payQuery.student = studentId;
-
-        const payments = await FeePayment.find(payQuery)
-            .populate('student', 'name')
-            .populate('voucher', 'voucherNumber')
-            .sort({ paymentDate: 1 })
-            .lean();
-
-        for (const pmt of payments) {
-            if (!pmt.student) continue;
-            const sid = pmt.student._id.toString();
-            if (!groupedData[sid]) groupedData[sid] = { studentName: pmt.student.name, items: [], totalQty: 0, totalAmount: 0 };
-            const vNum = pmt.voucher?.voucherNumber || pmt.paymentNumber || 'N/A';
-            const amount = pmt.amount || 0;
-            groupedData[sid].totalQty += 1;
-            groupedData[sid].totalAmount += amount;
-            groupedData[sid].items.push({
-                _id: `fp_${pmt._id}`,
-                type: 'Fee Payment',
-                date: pmt.paymentDate || pmt.createdAt,
-                num: vNum,
-                item: `Fee Collected — Voucher #${vNum}`,
-                qty: 1,
-                price: amount,
-                amount,
-            });
-        }
-
-        // ── 3. Fee Refunds (deductions from income) ────────────────────────
+        // ── 2. Fee Refunds (deductions from income) ────────────────────────
         // FeeRefund imported at top
         const refundQuery = { company: companyId };
         if (dateFilter.$gte) refundQuery.date = dateFilter;
