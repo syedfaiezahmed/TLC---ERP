@@ -74,7 +74,15 @@ const getClassLogs = async (req, res) => {
         teacher: { _id: teacher._id, name: teacher.name, email: teacher.email, salaryType: teacher.salaryType },
         perClassRates: teacher.perClassRates,
         batches: teacherBatches.map(b => {
-          const rate = teacher.perClassRates.find(r => r.course?._id?.toString() === b.course?._id?.toString());
+          const rate = (
+            teacher.perClassRates.find(r =>
+              r.course?._id?.toString() === b.course?._id?.toString() &&
+              r.batch?.toString() === b._id?.toString()
+            ) ||
+            teacher.perClassRates.find(r =>
+              r.course?._id?.toString() === b.course?._id?.toString() && !r.batch
+            )
+          );
           return {
             _id: b._id,
             name: b.name,
@@ -120,7 +128,15 @@ const saveClassLogs = async (req, res) => {
     const batches = await Batch.find({ _id: { $in: batchIds }, company: companyId }).lean();
 
     const docs = batches.map(b => {
-      const rate = teacher.perClassRates.find(r => r.course?.toString() === b.course?.toString());
+      const rate = (
+        teacher.perClassRates.find(r =>
+          r.course?.toString() === b.course?.toString() &&
+          r.batch?.toString() === b._id?.toString()
+        ) ||
+        teacher.perClassRates.find(r =>
+          r.course?.toString() === b.course?.toString() && !r.batch
+        )
+      );
       return {
         company:      companyId,
         teacher:      teacherId,

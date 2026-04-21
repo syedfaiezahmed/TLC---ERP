@@ -87,22 +87,30 @@ const buildAttendanceForCalc = async (companyId, teacherId, start, end) => {
       $lookup: { from: 'courses', localField: 'course', foreignField: '_id', as: 'courseDoc' },
     },
     {
+      $lookup: { from: 'batches', localField: 'batch', foreignField: '_id', as: 'batchDoc' },
+    },
+    {
       $group: {
         _id: {
           dateStr: { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
           course: '$course',
+          batch: '$batch',
         },
         course: { $first: '$course' },
+        batch: { $first: '$batch' },
         courseName: { $first: { $arrayElemAt: ['$courseDoc.name', 0] } },
+        batchName:  { $first: { $arrayElemAt: ['$batchDoc.name', 0] } },
       },
     },
   ]);
 
-  // Each element = one class held
+  // Each element = one class held (unique date+course+batch combo)
   return sessions.map((s) => ({
     classHeld: true,
-    course: s.course,
+    course:     s.course,
+    batch:      s.batch  || null,
     courseName: s.courseName || 'Unknown Course',
+    batchName:  s.batchName  || null,
   }));
 };
 

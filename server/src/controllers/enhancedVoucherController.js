@@ -3,7 +3,8 @@ import feeCalculationService from '../services/feeCalculationService.js';
 import FeeVoucher from '../models/FeeVoucher.js';
 import Company from '../models/Company.js';
 import mongoose from 'mongoose';
-import { postJournal } from '../services/journalService.js';
+import { postJournal, postFeePaymentJournal, postFeeCollectionJournal } from '../services/journalService.js';
+import Fee from '../models/Fee.js';
 import { logAudit } from '../services/auditService.js';
 import { healVoucherStatuses, forceHealVoucherStatuses } from '../services/voucherHealService.js';
 
@@ -230,24 +231,41 @@ class VoucherController {
         voucher.paidDate = new Date();
         voucher.paidAmount = amountPaid;
 
-        // Post accounting journal: Dr Cash/Bank  Cr Fee Revenue (base) + Cr Late Fee Revenue (if any)
+        // CA RULE:
+        //   If voucher links to a pre-existing Fee (already has Dr AR / Cr Fee Revenue accrual entry)
+        //   → post settlement: Dr Cash / Cr Accounts Receivable
+        //   If standalone voucher (no prior accrual) → Dr Cash / Cr Fee Revenue (cash basis)
         if (prevStatus !== 'paid') {
           try {
-            const cashAccount = (paymentMethod === 'Bank Transfer' || paymentMethod === 'Cheque' || paymentMethod === 'Online')
-              ? 'Bank' : 'Cash';
-            const lateFee = Number(voucher.lateFee || 0);
-            const baseFee = amountPaid - lateFee;
-            const jLines = [
-              { accountName: cashAccount, accountType: 'asset', debit: amountPaid, credit: 0, type: 'fee_payment', student: voucher.student?._id, description: `Fee collected - ${voucher.voucherNumber}` },
-              { accountName: 'Fee Revenue', accountType: 'revenue', debit: 0, credit: lateFee > 0 ? baseFee : amountPaid, type: 'fee_payment', student: voucher.student?._id, description: `Fee Revenue - ${voucher.voucherNumber}` },
-            ];
-            if (lateFee > 0) {
-              jLines.push({ accountName: 'Late Fee Revenue', accountType: 'revenue', debit: 0, credit: lateFee, type: 'fee_payment', student: voucher.student?._id, description: `Late Fee - ${voucher.voucherNumber}` });
+            const payMeth = paymentMethod || 'Cash';
+            const linkedFee = voucher.fee ? await Fee.findById(voucher.fee).lean() : null;
+            if (linkedFee) {
+              await postFeePaymentJournal({
+                companyId,
+                studentId: voucher.student?._id,
+                fee: linkedFee,
+                date: new Date(),
+                amount: amountPaid,
+                discount: 0,
+                reference: '',
+                paymentMethod: payMeth,
+              });
+            } else {
+              const cashAccount = (payMeth === 'Bank Transfer' || payMeth === 'Cheque' || payMeth === 'Online') ? 'Bank' : 'Cash';
+              const lateFee = Number(voucher.lateFee || 0);
+              const baseFee = amountPaid - lateFee;
+              const jLines = [
+                { accountName: cashAccount, accountType: 'asset', debit: amountPaid, credit: 0, type: 'fee_payment', student: voucher.student?._id, description: `Fee collected - ${voucher.voucherNumber}` },
+                { accountName: 'Fee Revenue', accountType: 'revenue', debit: 0, credit: lateFee > 0 ? baseFee : amountPaid, type: 'fee_payment', student: voucher.student?._id, description: `Fee Revenue - ${voucher.voucherNumber}` },
+              ];
+              if (lateFee > 0) {
+                jLines.push({ accountName: 'Late Fee Revenue', accountType: 'revenue', debit: 0, credit: lateFee, type: 'fee_payment', student: voucher.student?._id, description: `Late Fee - ${voucher.voucherNumber}` });
+              }
+              await postJournal(
+                { companyId, studentId: voucher.student?._id, date: new Date(), description: `Fee Payment - Voucher #${voucher.voucherNumber}`, referenceType: 'fee_payment', referenceId: voucher._id },
+                jLines
+              );
             }
-            await postJournal(
-              { companyId, studentId: voucher.student?._id, date: new Date(), description: `Fee Payment - Voucher #${voucher.voucherNumber}`, referenceType: 'fee_payment', referenceId: voucher._id },
-              jLines
-            );
           } catch (jErr) { console.error('[updateVoucherStatus] journal error:', jErr.message); }
         }
       }

@@ -14,11 +14,21 @@ export const calculateFixedSalary = (monthlySalary, annualSalary = 0) => {
 };
 
 /**
- * Calculate per-class earnings for a teacher
- * @param {Array} classAttendance - Array of attendance records with course info
- * @param {Array} perClassRates - Array of { course, ratePerClass }
- * @returns {Object} { totalAmount, classCount, breakdown }
+ * Find the best-matching rate for a (course, batch) pair.
+ * Priority: batch+course specific rate → course-only rate (no batch set).
  */
+const findBestRate = (perClassRates, courseId, batchId) => {
+  if (batchId) {
+    const specific = perClassRates.find(
+      (r) => r.course?.toString() === courseId && r.batch?.toString() === batchId.toString()
+    );
+    if (specific) return specific;
+  }
+  return perClassRates.find(
+    (r) => r.course?.toString() === courseId && !r.batch
+  );
+};
+
 export const calculatePerClassEarnings = (classAttendance, perClassRates) => {
   if (!Array.isArray(classAttendance) || classAttendance.length === 0) {
     return { totalAmount: 0, classCount: 0, breakdown: [] };
@@ -28,33 +38,39 @@ export const calculatePerClassEarnings = (classAttendance, perClassRates) => {
   let totalAmount = 0;
   let totalClasses = 0;
 
-  // Group classes by course
+  // Group classes by course+batch combination
   classAttendance.forEach((attendance) => {
     if (!attendance.classHeld || !attendance.course) return;
 
     const courseId = attendance.course.toString();
-    
-    if (!breakdown[courseId]) {
-      breakdown[courseId] = {
-        course: attendance.course,
+    const batchId  = attendance.batch ? attendance.batch.toString() : null;
+    const comboKey = `${courseId}::${batchId || ''}`;
+
+    if (!breakdown[comboKey]) {
+      breakdown[comboKey] = {
+        course:     attendance.course,
+        batch:      attendance.batch || null,
         courseName: attendance.courseName || 'Unknown Course',
+        batchName:  attendance.batchName  || null,
         classCount: 0,
         ratePerClass: 0,
         amount: 0,
       };
     }
 
-    breakdown[courseId].classCount += 1;
+    breakdown[comboKey].classCount += 1;
     totalClasses += 1;
   });
 
-  // Calculate amounts based on rates
-  Object.keys(breakdown).forEach((courseId) => {
-    const rate = perClassRates.find((r) => r.course.toString() === courseId);
+  // Calculate amounts using batch-aware rate lookup
+  Object.values(breakdown).forEach((item) => {
+    const courseId = item.course?.toString();
+    const batchId  = item.batch?.toString();
+    const rate = findBestRate(perClassRates, courseId, batchId);
     if (rate) {
-      breakdown[courseId].ratePerClass = rate.ratePerClass;
-      breakdown[courseId].amount = breakdown[courseId].classCount * rate.ratePerClass;
-      totalAmount += breakdown[courseId].amount;
+      item.ratePerClass = rate.ratePerClass;
+      item.amount = item.classCount * rate.ratePerClass;
+      totalAmount += item.amount;
     }
   });
 

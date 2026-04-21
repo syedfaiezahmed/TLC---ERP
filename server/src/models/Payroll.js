@@ -32,7 +32,9 @@ const payrollSchema = mongoose.Schema(
         breakdown: [
           {
             course: { type: mongoose.Schema.Types.ObjectId, ref: 'Course' },
+            batch: { type: mongoose.Schema.Types.ObjectId, ref: 'Batch', default: null },
             courseName: { type: String },
+            batchName: { type: String, default: null },
             classCount: { type: Number, required: true },
             ratePerClass: { type: Number, required: true },
             amount: { type: Number, required: true },

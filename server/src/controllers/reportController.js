@@ -268,33 +268,49 @@ const getRevenueDetailReport = async (req, res) => {
 
         const groupedData = {};
 
-        // ── 1. Old Fee model (fee receipts) ──────────────────────────────────
-        const feeQuery = { company: companyId };
-        if (dateFilter.$gte) feeQuery.date = dateFilter;
-        if (studentId) feeQuery.student = studentId;
+        // ── 1. Old Fee system — embedded cash payments only (de-duplicated vs voucher system) ─
+        // CA RULE: Fee Income is recognised on COLLECTION (cash basis), not on invoicing.
+        // We use Fee.payments[] for fees paid via the legacy direct-payment path.
+        // Fees that were collected via the FeeVoucher/FeePayment system are excluded
+        // here to avoid double-counting (they appear in Source 2 below).
 
-        const fees = await Fee.find(feeQuery)
-            .select('feeNumber date items student totalAmount')
+        // Get all fee _ids already covered by the voucher payment system
+        const voucherLinkedFeeIds = await FeePayment.distinct('fee', {
+            company: companyId,
+            fee: { $ne: null },
+        });
+        const voucherLinkedFeeSet = new Set(voucherLinkedFeeIds.map(id => id.toString()));
+
+        // Fetch fees with embedded payments that are NOT covered by the voucher system
+        const legacyFeeQuery = { company: companyId, 'payments.0': { $exists: true } };
+        if (studentId) legacyFeeQuery.student = studentId;
+
+        const feesWithPayments = await Fee.find(legacyFeeQuery)
+            .select('feeNumber date payments student')
             .populate('student', 'name')
             .sort({ date: 1 })
             .lean();
 
-        for (const fee of fees) {
+        for (const fee of feesWithPayments) {
             if (!fee.student) continue;
+            if (voucherLinkedFeeSet.has(fee._id.toString())) continue; // covered by Source 2
             const sid = fee.student._id.toString();
             if (!groupedData[sid]) groupedData[sid] = { studentName: fee.student.name, items: [], totalQty: 0, totalAmount: 0 };
-            for (const item of (fee.items || [])) {
-                groupedData[sid].totalQty += (item.quantity || 1);
-                groupedData[sid].totalAmount += (item.amount || 0);
+            for (const pmt of (fee.payments || [])) {
+                const pmtDate = new Date(pmt.date);
+                if (dateFilter.$gte && (pmtDate < dateFilter.$gte || pmtDate > dateFilter.$lte)) continue;
+                const amount = Number(pmt.amount || 0);
+                groupedData[sid].totalQty += 1;
+                groupedData[sid].totalAmount += amount;
                 groupedData[sid].items.push({
-                    _id: `${fee._id}_${item._id}`,
+                    _id: `fee_pmt_${fee._id}_${pmt._id}`,
                     type: 'Fee Receipt',
-                    date: fee.date,
+                    date: pmtDate,
                     num: fee.feeNumber,
-                    item: item.description || 'Course Fee',
-                    qty: item.quantity || 1,
-                    price: item.price || 0,
-                    amount: item.amount || 0,
+                    item: `Payment — Fee #${fee.feeNumber}`,
+                    qty: 1,
+                    price: amount,
+                    amount,
                 });
             }
         }
@@ -1290,6 +1306,111 @@ const getCashFlowStatement = async (req, res) => {
     }
 };
 
+/**
+ * @desc  One-time cleanup: reverse historical duplicate Fee Revenue credits.
+ *        When a voucher payment was collected against a pre-existing Fee record,
+ *        the old code incorrectly posted Dr Cash / Cr Fee Revenue (double-crediting
+ *        revenue that was already recognised at invoice creation).
+ *        This endpoint finds those bad entries, reverses them, and posts the
+ *        correct Dr Cash / Cr Accounts Receivable settlement journals.
+ * @route POST /api/reports/admin/purge-duplicate-fee-revenue/:companyId
+ * @access SuperAdmin only
+ */
+const purgeDoubleFeeRevenueEntries = async (req, res) => {
+    try {
+        const { companyId } = req.params;
+        const companyObjectId = new mongoose.Types.ObjectId(companyId);
+
+        // Find all FeePayment records that have a linked Fee (pre-existing fee)
+        const linkedPayments = await FeePayment.find({
+            company: companyId,
+            fee: { $ne: null },
+        }).lean();
+
+        if (linkedPayments.length === 0) {
+            return res.json({ message: 'No linked payments found — nothing to clean up.', purged: 0 });
+        }
+
+        let purgedCount = 0;
+        const errors = [];
+
+        for (const pmt of linkedPayments) {
+            try {
+                // Find the bad Ledger entry: Fee Revenue credit posted with referenceType 'fee_payment'
+                // for this specific payment (referenceId = pmt._id)
+                const badEntries = await Ledger.find({
+                    company: companyObjectId,
+                    referenceType: 'fee_payment',
+                    accountName: 'Fee Revenue',
+                    credit: { $gt: 0 },
+                    $or: [
+                        { referenceId: pmt._id },
+                        { fee: pmt.fee },
+                    ],
+                }).lean();
+
+                if (badEntries.length === 0) continue;
+
+                // Reverse each bad Fee Revenue credit with a debit (contra entry)
+                for (const bad of badEntries) {
+                    const reversal = new Ledger({
+                        company: companyObjectId,
+                        student: bad.student,
+                        fee: bad.fee,
+                        referenceType: 'adjustment',
+                        referenceId: bad._id,
+                        reference: `CLEANUP-REV-${bad._id}`,
+                        journalId: `cleanup-${bad._id}`,
+                        date: new Date(),
+                        description: `[Cleanup] Reverse duplicate Fee Revenue — orig entry ${bad._id}`,
+                        debit: bad.credit,
+                        credit: 0,
+                        type: 'adjustment',
+                        accountName: 'Fee Revenue',
+                        accountType: 'revenue',
+                        relatedAccount: 'Accounts Receivable',
+                        balance: 0,
+                    });
+                    await reversal.save();
+
+                    // Post matching Cr Accounts Receivable to restore proper balance
+                    const arCredit = new Ledger({
+                        company: companyObjectId,
+                        student: bad.student,
+                        fee: bad.fee,
+                        referenceType: 'adjustment',
+                        referenceId: bad._id,
+                        reference: `CLEANUP-AR-${bad._id}`,
+                        journalId: `cleanup-${bad._id}`,
+                        date: new Date(),
+                        description: `[Cleanup] Restore AR settlement — orig entry ${bad._id}`,
+                        debit: 0,
+                        credit: bad.credit,
+                        type: 'adjustment',
+                        accountName: 'Accounts Receivable',
+                        accountType: 'asset',
+                        relatedAccount: 'Fee Revenue',
+                        balance: 0,
+                    });
+                    await arCredit.save();
+                    purgedCount++;
+                }
+            } catch (err) {
+                errors.push({ paymentId: pmt._id, error: err.message });
+            }
+        }
+
+        return res.json({
+            message: `Cleanup complete. Reversed ${purgedCount} duplicate Fee Revenue entries.`,
+            purged: purgedCount,
+            errors,
+        });
+    } catch (error) {
+        console.error('[purgeDoubleFeeRevenueEntries]', error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
 export {
     getRevenueReport,
     getReceivablesReport,
@@ -1306,5 +1427,6 @@ export {
     getTrialBalance,
     getGeneralLedgerReport,
     getPaymentsReport,
-    getCashFlowStatement
+    getCashFlowStatement,
+    purgeDoubleFeeRevenueEntries,
 };

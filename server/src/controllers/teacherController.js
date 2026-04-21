@@ -110,6 +110,8 @@ const getTeachers = async (req, res) => {
             .sort({ name: 1 })
             .skip(skip)
             .limit(limitNum)
+            .populate('perClassRates.course', 'name')
+            .populate('perClassRates.batch', 'name course')
             .lean(),
         Teacher.countDocuments(query)
     ]);

@@ -48,6 +48,7 @@ const Teachers = () => {
   const [editId, setEditId] = useState(null);
   const [formData, setFormData] = useState(emptyForm());
   const [courses, setCourses] = useState([]);
+  const [batches, setBatches] = useState([]);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [saving, setSaving] = useState(false);
 
@@ -55,6 +56,7 @@ const Teachers = () => {
     if (companyId) {
       dispatch(getTeachers({ companyId, params: {} }));
       api.fetchCourses(companyId).then(r => setCourses(r.data?.courses || [])).catch(() => {});
+      api.fetchBatches(companyId).then(r => setBatches(Array.isArray(r.data) ? r.data : (r.data?.batches || []))).catch(() => {});
     }
   }, [dispatch, companyId]);
 
@@ -73,7 +75,7 @@ const Teachers = () => {
       salaryType: t.salaryType || 'fixed',
       annualSalary: t.annualSalary || '',
       fixedSalary: t.fixedSalary || '',
-      perClassRates: (t.perClassRates || []).map(r => ({ course: r.course?._id || r.course || '', ratePerClass: r.ratePerClass || 0 })),
+      perClassRates: (t.perClassRates || []).map(r => ({ course: r.course?._id || r.course || '', batch: r.batch?._id || r.batch || '', ratePerClass: r.ratePerClass || 0 })),
       commissionRates: (t.commissionRates || []).map(r => ({ course: r.course?._id || r.course || '', percentage: r.percentage || 0 })),
       bankDetails: t.bankDetails || { accountName: '', accountNumber: '', bankName: '' },
     });
@@ -90,7 +92,7 @@ const Teachers = () => {
 
   const handleChange = (field, value) => setFormData(f => ({ ...f, [field]: value }));
 
-  const addPerClassRate = () => setFormData(f => ({ ...f, perClassRates: [...f.perClassRates, { course: '', ratePerClass: 0 }] }));
+  const addPerClassRate = () => setFormData(f => ({ ...f, perClassRates: [...f.perClassRates, { course: '', batch: '', ratePerClass: 0 }] }));
   const removePerClassRate = (i) => setFormData(f => ({ ...f, perClassRates: f.perClassRates.filter((_, idx) => idx !== i) }));
   const updatePerClassRate = (i, field, val) => setFormData(f => {
     const arr = [...f.perClassRates]; arr[i] = { ...arr[i], [field]: val }; return { ...f, perClassRates: arr };
@@ -116,7 +118,9 @@ const Teachers = () => {
       const payload = {
         ...formData,
         companyId,
-        perClassRates: formData.perClassRates.filter(r => r.course && r.course !== ''),
+        perClassRates: formData.perClassRates
+          .filter(r => r.course && r.course !== '')
+          .map(r => ({ ...r, batch: r.batch || null })),
         commissionRates: formData.commissionRates.filter(r => r.course && r.course !== ''),
       };
       if (editMode) {
@@ -298,20 +302,39 @@ const Teachers = () => {
                 {formData.perClassRates.length === 0 && (
                   <Typography variant="caption" color="text.secondary">No rates added yet. Click "Add Rate" to configure.</Typography>
                 )}
-                {formData.perClassRates.map((r, i) => (
-                  <Box key={i} sx={{ display: 'flex', gap: 1.5, mb: 1.5, alignItems: 'center' }}>
-                    <FormControl size="small" sx={{ flex: 2 }}>
-                      <InputLabel>Class / Course</InputLabel>
-                      <Select value={r.course} label="Class / Course" onChange={e => updatePerClassRate(i, 'course', e.target.value)}>
-                        {courses.map(c => <MenuItem key={c._id} value={c._id}>{c.name}</MenuItem>)}
-                      </Select>
-                    </FormControl>
-                    <TextField size="small" label="Rate per Class (PKR)" type="number" sx={{ flex: 1 }}
-                      value={r.ratePerClass} onChange={e => updatePerClassRate(i, 'ratePerClass', e.target.value)}
-                      InputProps={{ startAdornment: <InputAdornment position="start">PKR</InputAdornment> }} />
-                    <IconButton size="small" color="error" onClick={() => removePerClassRate(i)}><DeleteIcon fontSize="small" /></IconButton>
-                  </Box>
-                ))}
+                {formData.perClassRates.map((r, i) => {
+                  const courseBatches = batches.filter(b =>
+                    !r.course || String(b.course?._id || b.course) === String(r.course)
+                  );
+                  return (
+                    <Box key={i} sx={{ display: 'flex', gap: 1.5, mb: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <FormControl size="small" sx={{ flex: '1 1 180px', minWidth: 140 }}>
+                        <InputLabel>Class / Course</InputLabel>
+                        <Select value={r.course} label="Class / Course"
+                          onChange={e => {
+                            updatePerClassRate(i, 'course', e.target.value);
+                            updatePerClassRate(i, 'batch', '');
+                          }}>
+                          {courses.map(c => <MenuItem key={c._id} value={c._id}>{c.name}</MenuItem>)}
+                        </Select>
+                      </FormControl>
+                      <FormControl size="small" sx={{ flex: '1 1 160px', minWidth: 130 }}>
+                        <InputLabel>Batch (Optional)</InputLabel>
+                        <Select value={r.batch || ''} label="Batch (Optional)"
+                          onChange={e => updatePerClassRate(i, 'batch', e.target.value)}>
+                          <MenuItem value=""><em>Any Batch</em></MenuItem>
+                          {courseBatches.map(b => (
+                            <MenuItem key={b._id} value={b._id}>{b.name}</MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                      <TextField size="small" label="Rate per Class (PKR)" type="number" sx={{ flex: '1 1 130px', minWidth: 110 }}
+                        value={r.ratePerClass} onChange={e => updatePerClassRate(i, 'ratePerClass', e.target.value)}
+                        InputProps={{ startAdornment: <InputAdornment position="start">PKR</InputAdornment> }} />
+                      <IconButton size="small" color="error" onClick={() => removePerClassRate(i)}><DeleteIcon fontSize="small" /></IconButton>
+                    </Box>
+                  );
+                })}
               </Box>
             )}
 

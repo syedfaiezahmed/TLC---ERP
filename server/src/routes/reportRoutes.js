@@ -15,7 +15,8 @@ import {
     getBalanceSheet,
     getGeneralLedgerReport,
     getPaymentsReport,
-    getCashFlowStatement
+    getCashFlowStatement,
+    purgeDoubleFeeRevenueEntries
 } from '../controllers/reportController.js';
 import { protect } from '../middleware/authMiddleware.js';
 
@@ -37,5 +38,6 @@ router.get('/balance-sheet/:companyId', protect, getBalanceSheet);
 router.get('/ledger/:companyId', protect, getGeneralLedgerReport);
 router.get('/payments/:companyId', protect, getPaymentsReport);
 router.get('/cash-flow/:companyId', protect, getCashFlowStatement);
+router.post('/admin/purge-duplicate-fee-revenue/:companyId', protect, purgeDoubleFeeRevenueEntries);
 
 export default router;

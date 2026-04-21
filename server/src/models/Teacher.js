@@ -36,6 +36,7 @@ const teacherSchema = mongoose.Schema(
     perClassRates: [
       {
         course: { type: mongoose.Schema.Types.ObjectId, ref: 'Course' },
+        batch: { type: mongoose.Schema.Types.ObjectId, ref: 'Batch', default: null },
         ratePerClass: { type: Number, required: true },
       },
     ],

@@ -1,7 +1,7 @@
 import FeePayment from '../models/FeePayment.js';
 import Fee from '../models/Fee.js';
 import FeeVoucher from '../models/FeeVoucher.js';
-import { postFeeCollectionJournal, postFeePaymentRefundJournal } from './journalService.js';
+import { postFeeCollectionJournal, postFeePaymentRefundJournal, postFeePaymentJournal } from './journalService.js';
 import { forceHealVoucherStatuses } from './voucherHealService.js';
 
 class FeeCollectionService {
@@ -45,10 +45,16 @@ class FeeCollectionService {
       // ── Load fee record (optional — never block payment on missing fee) ──────
       console.log('[FeeCollection] Step 2: Loading fee record (feeId:', feeId, ', voucher.fee:', voucher.fee, ')');
       let fee = null;
+      let feeIsPreExisting = false; // CA flag: true = fee has prior Dr AR / Cr Revenue accrual entry
       const lookupFeeId = feeId || voucher.fee;
       if (lookupFeeId) {
         fee = await Fee.findOne({ _id: lookupFeeId, company: companyId });
-        console.log('[FeeCollection] Fee found:', fee ? fee._id : 'NOT FOUND');
+        if (fee) {
+          feeIsPreExisting = true; // Fee was created via feeController → already has accrual journal
+          console.log('[FeeCollection] Fee found (pre-existing, has accrual entry):', fee._id);
+        } else {
+          console.log('[FeeCollection] Fee ID provided but not found:', lookupFeeId);
+        }
       }
 
       // ── Auto-create Fee if missing so future accounting stays intact ─────────
@@ -193,19 +199,38 @@ class FeeCollectionService {
       }
 
       // ── Post journal entry (non-fatal — never block payment on accounting failure) ─
+      // CA RULE:
+      //   Pre-existing fee → Dr Cash / Cr Accounts Receivable  (settles the accrual entry)
+      //   Standalone voucher (no prior fee) → Dr Cash / Cr Fee Revenue  (cash-basis income)
       try {
-        await postFeeCollectionJournal({
-          companyId,
-          studentId: voucher.student,
-          voucher,
-          payment,
-          paymentAmount: numericAmount,
-          paymentMethod,
-          lateFeeAmount: lateFeeIncluded ? (Number(providedLateFeeAmount) || voucher.lateFeeAmount || 0) : 0,
-          discountAmount: Number(discountAmount) || 0,
-          date: payDate,
-        });
-        console.log('[FeeCollection] Journal entry posted');
+        if (feeIsPreExisting && fee) {
+          // Settlement journal — accrual entry already posted at fee creation
+          await postFeePaymentJournal({
+            companyId,
+            studentId: voucher.student,
+            fee,
+            date: payDate,
+            amount: numericAmount,
+            discount: Number(discountAmount) || 0,
+            reference: referenceNumber || '',
+            paymentMethod,
+          });
+          console.log('[FeeCollection] Settlement journal posted (Dr Cash / Cr AR)');
+        } else {
+          // Cash-basis income journal — no prior accrual entry exists
+          await postFeeCollectionJournal({
+            companyId,
+            studentId: voucher.student,
+            voucher,
+            payment,
+            paymentAmount: numericAmount,
+            paymentMethod,
+            lateFeeAmount: lateFeeIncluded ? (Number(providedLateFeeAmount) || voucher.lateFeeAmount || 0) : 0,
+            discountAmount: Number(discountAmount) || 0,
+            date: payDate,
+          });
+          console.log('[FeeCollection] Cash-basis income journal posted (Dr Cash / Cr Fee Revenue)');
+        }
       } catch (jErr) {
         console.error('[FeeCollection] Journal post failed (non-fatal):', jErr.message);
       }

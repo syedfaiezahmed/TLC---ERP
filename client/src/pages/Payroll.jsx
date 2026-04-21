@@ -36,7 +36,7 @@ const generatePayslipHTML = (payroll, companyName) => {
 
   const perClassRows = (sc.perClassEarnings?.breakdown || []).map(b => `
     <tr>
-      <td style="padding:6px 12px;">Per-Class: ${b.courseName || '—'} (${b.classCount} classes × PKR ${Number(b.ratePerClass).toLocaleString()})</td>
+      <td style="padding:6px 12px;">Per-Class: ${b.courseName || '—'}${b.batchName ? ` (${b.batchName})` : ''} — ${b.classCount} classes × PKR ${Number(b.ratePerClass).toLocaleString()}</td>
       <td style="padding:6px 12px;text-align:right;">PKR ${Number(b.amount).toLocaleString()}</td>
     </tr>`).join('');
 
@@ -437,7 +437,7 @@ const Payroll = () => {
                       </TableCell>
                       <TableCell align="right">
                         {sc.perClassEarnings?.totalAmount > 0 ? (
-                          <Tooltip title={(sc.perClassEarnings?.breakdown || []).map(b => `${b.courseName}: ${b.classCount} cls × ${b.ratePerClass} = ${b.amount}`).join('\n')}>
+                          <Tooltip title={(sc.perClassEarnings?.breakdown || []).map(b => `${b.courseName}${b.batchName ? ` [${b.batchName}]` : ''}: ${b.classCount} cls × ${b.ratePerClass} = ${b.amount}`).join('\n')}>
                             <Typography variant="body2" color="success.main" fontWeight={600}>
                               {fmt(sc.perClassEarnings.totalAmount)}
                               <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
