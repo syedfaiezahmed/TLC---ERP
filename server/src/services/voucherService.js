@@ -50,10 +50,14 @@ class VoucherGenerationService {
 
       for (const [studentId, studentData] of Object.entries(enrollmentsByStudent)) {
         // Skip if voucher already exists for this student/month
+        // Use date range (not exact match) so timezone variations don't cause false negatives
+        const monthRangeStart = new Date(Date.UTC(voucherMonth.getUTCFullYear(), voucherMonth.getUTCMonth(), 1));
+        const monthRangeEnd   = new Date(Date.UTC(voucherMonth.getUTCFullYear(), voucherMonth.getUTCMonth() + 1, 1));
         const existingVoucher = await FeeVoucher.findOne({
           company: companyId,
           student: studentId,
-          month: voucherMonth
+          month: { $gte: monthRangeStart, $lt: monthRangeEnd },
+          status: { $ne: 'cancelled' },
         });
         if (existingVoucher) {
           generatedVouchers.push(existingVoucher);
@@ -165,6 +169,27 @@ class VoucherGenerationService {
         amount: admissionFeeTotal,
         feeType: 'admission',
       });
+    }
+
+    // Guard: if this voucher already has a linked fee, reuse it
+    if (voucher.fee) {
+      const linked = await Fee.findById(voucher.fee);
+      if (linked) return linked;
+    }
+
+    // Guard: no duplicate fee for same student + same dueDate month
+    const dueDateStart = new Date(Date.UTC(new Date(voucher.dueDate).getUTCFullYear(), new Date(voucher.dueDate).getUTCMonth(), 1));
+    const dueDateEnd   = new Date(Date.UTC(new Date(voucher.dueDate).getUTCFullYear(), new Date(voucher.dueDate).getUTCMonth() + 1, 1));
+    const existingFee = await Fee.findOne({
+      company: voucher.company,
+      student: student._id,
+      dueDate: { $gte: dueDateStart, $lt: dueDateEnd },
+      status: { $ne: 'cancelled' },
+    });
+    if (existingFee) {
+      voucher.fee = existingFee._id;
+      await voucher.save();
+      return existingFee;
     }
 
     const fee = new Fee({

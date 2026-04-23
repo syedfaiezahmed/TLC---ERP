@@ -143,11 +143,14 @@ const getFees = async (req, res) => {
 
     if (status && status !== 'all') {
         if (status === 'overdue') {
-            query.status = { $ne: 'paid' };
+            query.status = { $in: ['unpaid', 'partial'] };
             query.dueDate = { $lt: new Date() };
         } else {
             query.status = status;
         }
+    } else if (!status || status === 'all') {
+        // By default, never show cancelled fees unless explicitly requested
+        query.status = { $ne: 'cancelled' };
     }
 
     if (startDate && endDate) {

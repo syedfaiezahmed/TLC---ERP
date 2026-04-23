@@ -269,7 +269,7 @@ const getRevenueDetailReport = async (req, res) => {
         const groupedData = {};
 
         // ── 1. Old Fee model (fee receipts) ──────────────────────────────────
-        const feeQuery = { company: companyId };
+        const feeQuery = { company: companyId, status: { $ne: 'cancelled' } };
         if (dateFilter.$gte) feeQuery.date = dateFilter;
         if (studentId) feeQuery.student = studentId;
 

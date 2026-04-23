@@ -68,7 +68,7 @@ const feeSchema = mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['paid', 'unpaid', 'partial'],
+      enum: ['paid', 'unpaid', 'partial', 'cancelled'],
       default: 'unpaid',
     },
     paidAmount: {

@@ -143,7 +143,10 @@ feeVoucherSchema.methods.getApplicableAmount = function () {
 
 // Indexes
 feeVoucherSchema.index({ company: 1, voucherNumber: 1 }, { unique: true });
-feeVoucherSchema.index({ company: 1, student: 1, month: 1 });
+feeVoucherSchema.index(
+  { company: 1, student: 1, month: 1 },
+  { unique: true, partialFilterExpression: { status: { $ne: 'cancelled' } } }
+);
 feeVoucherSchema.index({ company: 1, status: 1 });
 feeVoucherSchema.index({ dueDate: 1, status: 1 });
 
