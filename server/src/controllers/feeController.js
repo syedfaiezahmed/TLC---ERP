@@ -672,7 +672,8 @@ const deletePayment = async (req, res) => {
                 const feeDoc = await Fee.findById(feePayment.fee);
                 if (feeDoc) {
                     const activePmts = await FeePayment.find({ fee: feePayment.fee, status: 'active' });
-                    const newPaid = activePmts.reduce((s, p) => s + p.amount, 0);
+                    // CA RULE: fee.paidAmount tracks BASE FEE only — exclude late fee from each payment
+                    const newPaid = activePmts.reduce((s, p) => s + (p.amount - (p.lateFeeAmount || 0)), 0);
                     const newDiscount = activePmts.reduce((s, p) => s + (p.discountAmount || 0), 0);
                     feeDoc.paidAmount     = newPaid;
                     feeDoc.writeOffAmount = newDiscount;
@@ -700,6 +701,7 @@ const deletePayment = async (req, res) => {
                 recalculateLedger(cid, null, cashAcc),
                 recalculateLedger(cid, null, 'Accounts Receivable'),
                 recalculateLedger(cid, null, 'Fee Revenue'),
+                recalculateLedger(cid, null, 'Late Fee Revenue'),
             ]).catch(() => {});
 
             try { await logAudit({ req, companyId: cid, action: 'delete_payment', entityType: 'fee_payment', entityId: feePayment._id, before, after: null }); } catch (_) {}

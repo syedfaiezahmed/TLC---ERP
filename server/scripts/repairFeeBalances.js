@@ -27,7 +27,7 @@ const fpAgg = await FeePayment.aggregate([
   {
     $group: {
       _id: '$fee',
-      totalAmount: { $sum: '$amount' },
+      totalAmount: { $sum: { $subtract: ['$amount', { $ifNull: ['$lateFeeAmount', 0] }] } },  // base fee only
       totalDiscount: { $sum: { $ifNull: ['$discountAmount', 0] } },
     }
   }

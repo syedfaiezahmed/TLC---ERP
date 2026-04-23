@@ -733,7 +733,18 @@ export const postVoucherPaymentJournal = async ({ companyId, studentId, voucher,
   return postJournal(meta, lines);
 };
 
-export const postFeePaymentJournal = async ({ companyId, studentId, fee, date, amount, discount = 0, reference, paymentMethod = 'Cash' }) => {
+/**
+ * Accrual-basis settlement journal for fee payments.
+ *
+ * CA RULES (double-entry must always balance):
+ *   Dr Cash/Bank             = totalCashReceived  (base fee + late fee)
+ *   Dr Scholarship/Discount  = discountAmount     (if any)
+ *   Cr Accounts Receivable   = baseFee + discount (clears EXACTLY what was accrued)
+ *   Cr Late Fee Revenue      = lateFeeAmount      (new income — was never accrued)
+ *
+ * Balance check: Dr = cash + disc = Cr = (base + disc) + lateFee = cash - lateFee + disc + lateFee = cash + disc ✅
+ */
+export const postFeePaymentJournal = async ({ companyId, studentId, fee, date, amount, discount = 0, lateFeeAmount = 0, reference, paymentMethod = 'Cash' }) => {
   const description = `Payment for Fee Receipt #${fee.feeNumber}`;
   const cashAccount = (paymentMethod && paymentMethod !== 'Cash') ? 'Bank' : 'Cash';
   const meta = {
@@ -747,14 +758,16 @@ export const postFeePaymentJournal = async ({ companyId, studentId, fee, date, a
     reference: reference || '',
   };
 
-  const payAmount = Number(amount);
+  const totalCash  = Number(amount);              // full cash received (may include late fee)
   const discAmount = Number(discount || 0);
+  const lateFee    = Number(lateFeeAmount || 0);
+  const baseFee    = totalCash - lateFee;         // portion that settles the AR accrual
 
   const lines = [
     {
       accountName: cashAccount,
       accountType: 'asset',
-      debit: payAmount,
+      debit: totalCash,
       credit: 0,
       relatedAccount: 'Accounts Receivable',
       type: 'payment',
@@ -781,13 +794,28 @@ export const postFeePaymentJournal = async ({ companyId, studentId, fee, date, a
       accountName: 'Accounts Receivable',
       accountType: 'asset',
       debit: 0,
-      credit: payAmount + discAmount,
-      relatedAccount: 'Cash',
+      credit: baseFee + discAmount,  // clears EXACTLY what was accrued (base fee net of discount)
+      relatedAccount: cashAccount,
       type: 'payment',
       student: studentId,
       fee: fee._id,
       description,
     },
+    ...(lateFee > 0
+      ? [
+          {
+            accountName: 'Late Fee Revenue',
+            accountType: 'revenue',
+            debit: 0,
+            credit: lateFee,
+            relatedAccount: cashAccount,
+            type: 'payment',
+            student: studentId,
+            fee: fee._id,
+            description: `Late Fee — Fee Receipt #${fee.feeNumber}`,
+          },
+        ]
+      : []),
   ];
 
   return postJournal(meta, lines);

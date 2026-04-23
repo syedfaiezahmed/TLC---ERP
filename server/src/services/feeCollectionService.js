@@ -190,12 +190,20 @@ class FeeCollectionService {
       console.log('[FeeCollection] Voucher updated — new status:', voucher.status, 'paid:', newPaidTotal);
 
       // ── Update Fee record (STANDARD FORMULA everywhere) ──────────────────────
+      // CA RULE: fee.totalAmount tracks BASE FEE only (not late fee).
+      // Late fee is a SEPARATE income stream (Late Fee Revenue) collected on top.
+      // fee.paidAmount must ONLY include the base fee component of the payment.
       if (fee) {
         console.log('[FeeCollection] Step 6: Updating fee record');
-        const discApplied = Number(discountAmount) || 0;
-        fee.paidAmount     = (fee.paidAmount || 0) + numericAmount;
+        const discApplied      = Number(discountAmount) || 0;
+        const lateFeeCollected = lateFeeIncluded
+          ? (Number(providedLateFeeAmount) || voucher.lateFeeAmount || 0)
+          : 0;
+        const baseFeeComponent = numericAmount - lateFeeCollected;  // base fee portion only
+
+        fee.paidAmount     = (fee.paidAmount || 0) + baseFeeComponent;
         fee.writeOffAmount = (fee.writeOffAmount || 0) + discApplied;
-        // STANDARD FORMULA: balanceDue = totalAmount - paidAmount - writeOffAmount - refundAmount
+        // STANDARD FORMULA: balanceDue = totalAmount - paidAmount(base) - writeOffAmount - refundAmount
         fee.balanceDue = Math.max(0, Number((
           fee.totalAmount - fee.paidAmount - (fee.writeOffAmount || 0) - (fee.refundAmount || 0)
         ).toFixed(2)));
@@ -203,12 +211,18 @@ class FeeCollectionService {
         else if (fee.paidAmount > 0)   { fee.status = 'partial'; }
         else                           { fee.status = 'unpaid';  }
         await fee.save();
-        console.log('[FeeCollection] Fee updated — new status:', fee.status);
+        console.log('[FeeCollection] Fee updated — base component:', baseFeeComponent, 'lateFee:', lateFeeCollected, 'new status:', fee.status);
       }
 
       // ── Post journal entry (non-fatal — never block payment on accounting failure) ─
-      // CA RULE: All fees now have accrual entries (either pre-existing or auto-created)
-      // Therefore, all payments post settlement: Dr Cash / Cr Accounts Receivable
+      // CA RULE: Accrual-basis settlement:
+      //   Dr Cash/Bank (full amount incl. late fee)
+      //   Cr AR (base fee only — clears the accrual)
+      //   Cr Late Fee Revenue (if late fee was charged — new income, never accrued)
+      //   Dr Scholarship/Discount (if discount given)
+      const lateFeeForJournal = lateFeeIncluded
+        ? (Number(providedLateFeeAmount) || voucher.lateFeeAmount || 0)
+        : 0;
       try {
         await postFeePaymentJournal({
           companyId,
@@ -217,10 +231,11 @@ class FeeCollectionService {
           date: payDate,
           amount: numericAmount,
           discount: Number(discountAmount) || 0,
+          lateFeeAmount: lateFeeForJournal,
           reference: referenceNumber || '',
           paymentMethod,
         });
-        console.log('[FeeCollection] Settlement journal posted (Dr Cash / Cr AR)');
+        console.log('[FeeCollection] Settlement journal posted (Dr Cash / Cr AR / Cr Late Fee Revenue)');
       } catch (jErr) {
         console.error('[FeeCollection] Journal post failed (non-fatal):', jErr.message);
       }
