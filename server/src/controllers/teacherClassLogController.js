@@ -44,18 +44,23 @@ const getClassLogs = async (req, res) => {
       salaryType: { $in: ['per_class', 'hybrid'] },
     })
       .populate('perClassRates.course', 'name')
+      .populate('assignedCourses.course', 'name')
+      .populate('assignedCourses.batch', 'name course')
       .lean();
 
     if (teachers.length === 0) return res.json([]);
 
-    // 3. Fetch all batches assigned to these teachers in this company
-    const batches = await Batch.find({
-      company: companyId,
-      teacher: { $in: teachers.map(t => t._id) },
-      status: { $in: ['Ongoing', 'Upcoming'] },
-    })
-      .populate('course', 'name')
-      .lean();
+    // 3. Fetch batches from teachers' assignedCourses (batch field)
+    const allBatchIds = [...new Set(
+      teachers.flatMap(t => (t.assignedCourses || []).filter(ac => ac.batch).map(ac => ac.batch?._id?.toString() || ac.batch.toString()))
+    )];
+    const batches = allBatchIds.length > 0
+      ? await Batch.find({
+          company: companyId,
+          _id: { $in: allBatchIds },
+          status: { $in: ['Ongoing', 'Upcoming'] },
+        }).populate('course', 'name').lean()
+      : [];
 
     // 4. Fetch existing class logs for this date
     const dateObj = new Date(date); dateObj.setHours(0, 0, 0, 0);
@@ -69,17 +74,22 @@ const getClassLogs = async (req, res) => {
 
     // 5. Build response: one entry per teacher with their batches
     const result = teachers.map(teacher => {
-      const teacherBatches = batches.filter(b => b.teacher.toString() === teacher._id.toString());
+      const teacherBatchIds = new Set(
+        (teacher.assignedCourses || []).filter(ac => ac.batch).map(ac => ac.batch?._id?.toString() || ac.batch.toString())
+      );
+      const teacherBatches = batches.filter(b => teacherBatchIds.has(b._id.toString()));
       return {
         teacher: { _id: teacher._id, name: teacher.name, email: teacher.email, salaryType: teacher.salaryType },
         perClassRates: teacher.perClassRates,
         batches: teacherBatches.map(b => {
-          const rate = (
-            teacher.perClassRates.find(r =>
+          const bIdStr = b._id.toString();
+          const ac = (teacher.assignedCourses || []).find(r => (r.batch?._id?.toString() || r.batch?.toString()) === bIdStr);
+          const fallbackRate = (
+            (teacher.perClassRates || []).find(r =>
               r.course?._id?.toString() === b.course?._id?.toString() &&
-              r.batch?.toString() === b._id?.toString()
+              r.batch?.toString() === bIdStr
             ) ||
-            teacher.perClassRates.find(r =>
+            (teacher.perClassRates || []).find(r =>
               r.course?._id?.toString() === b.course?._id?.toString() && !r.batch
             )
           );
@@ -87,7 +97,7 @@ const getClassLogs = async (req, res) => {
             _id: b._id,
             name: b.name,
             course: b.course,
-            ratePerClass: rate?.ratePerClass || 0,
+            ratePerClass: ac?.ratePerClass || fallbackRate?.ratePerClass || 0,
             logged: logSet.has(`${teacher._id}-${b._id}`),
           };
         }),

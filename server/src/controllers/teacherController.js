@@ -12,7 +12,7 @@ const createTeacher = async (req, res) => {
   try {
     const {
       name, contact, email, address, specialization, companyId, openingBalance, openingBalanceDate,
-      salaryType, annualSalary, fixedSalary, perClassRates, commissionRates, bankDetails,
+      salaryType, annualSalary, fixedSalary, assignedCourses, perClassRates, commissionRates, bankDetails,
     } = req.body;
 
     const company = await Company.findById(companyId);
@@ -32,6 +32,7 @@ const createTeacher = async (req, res) => {
       salaryType: salaryType || 'fixed',
       annualSalary: annual,
       fixedSalary: monthly,
+      assignedCourses: (assignedCourses || []).filter(r => r.course),
       perClassRates: (perClassRates || []).filter(r => r.course),
       commissionRates: (commissionRates || []).filter(r => r.course),
       bankDetails: bankDetails || {},
@@ -112,6 +113,8 @@ const getTeachers = async (req, res) => {
             .limit(limitNum)
             .populate('perClassRates.course', 'name')
             .populate('perClassRates.batch', 'name course')
+            .populate('assignedCourses.course', 'name')
+            .populate('assignedCourses.batch', 'name course')
             .lean(),
         Teacher.countDocuments(query)
     ]);
@@ -151,6 +154,7 @@ const updateTeacher = async (req, res) => {
     } else if (req.body.fixedSalary !== undefined) {
       teacher.fixedSalary = Number(req.body.fixedSalary);
     }
+    if (req.body.assignedCourses !== undefined) teacher.assignedCourses = req.body.assignedCourses.filter(r => r.course);
     if (req.body.perClassRates !== undefined) teacher.perClassRates = req.body.perClassRates.filter(r => r.course);
     if (req.body.commissionRates !== undefined) teacher.commissionRates = req.body.commissionRates.filter(r => r.course);
     if (req.body.bankDetails !== undefined) teacher.bankDetails = req.body.bankDetails;

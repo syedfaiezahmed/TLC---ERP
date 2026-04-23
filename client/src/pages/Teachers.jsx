@@ -76,7 +76,18 @@ const Teachers = () => {
       salaryType: t.salaryType || 'fixed',
       annualSalary: t.annualSalary || '',
       fixedSalary: t.fixedSalary || '',
-      assignedCourses: (t.assignedCourses || []).map(r => ({ course: r.course?._id || r.course || '', batch: r.batch?._id || r.batch || '' })),
+      assignedCourses: (() => {
+        const existing = (t.assignedCourses || []);
+        const rates = (t.perClassRates || []);
+        const source = existing.length > 0 ? existing : rates.map(r => ({ course: r.course, batch: r.batch, ratePerClass: r.ratePerClass }));
+        return source.map(r => {
+          const cId = r.course?._id || r.course || '';
+          const bId = r.batch?._id || r.batch || '';
+          const match = rates.find(pr => String(pr.course?._id || pr.course) === String(cId) && String(pr.batch?._id || pr.batch || '') === String(bId))
+            || rates.find(pr => String(pr.course?._id || pr.course) === String(cId) && !pr.batch);
+          return { course: cId, batch: bId, ratePerClass: r.ratePerClass || match?.ratePerClass || 0 };
+        });
+      })(),
       perClassRates: (t.perClassRates || []).map(r => ({ course: r.course?._id || r.course || '', batch: r.batch?._id || r.batch || '', ratePerClass: r.ratePerClass || 0 })),
       commissionRates: (t.commissionRates || []).map(r => ({ course: r.course?._id || r.course || '', percentage: r.percentage || 0 })),
       bankDetails: t.bankDetails || { accountName: '', accountNumber: '', bankName: '' },
@@ -94,7 +105,7 @@ const Teachers = () => {
 
   const handleChange = (field, value) => setFormData(f => ({ ...f, [field]: value }));
 
-  const addAssignedCourse = () => setFormData(f => ({ ...f, assignedCourses: [...f.assignedCourses, { course: '', batch: '' }] }));
+  const addAssignedCourse = () => setFormData(f => ({ ...f, assignedCourses: [...f.assignedCourses, { course: '', batch: '', ratePerClass: 0 }] }));
   const removeAssignedCourse = (i) => setFormData(f => ({ ...f, assignedCourses: f.assignedCourses.filter((_, idx) => idx !== i) }));
   const updateAssignedCourse = (i, field, val) => setFormData(f => {
     const arr = [...f.assignedCourses]; arr[i] = { ...arr[i], [field]: val }; return { ...f, assignedCourses: arr };
@@ -128,10 +139,10 @@ const Teachers = () => {
         companyId,
         assignedCourses: formData.assignedCourses
           .filter(r => r.course && r.course !== '')
-          .map(r => ({ course: r.course, batch: r.batch || null })),
-        perClassRates: formData.perClassRates
+          .map(r => ({ course: r.course, batch: r.batch || null, ratePerClass: Number(r.ratePerClass) || 0 })),
+        perClassRates: formData.assignedCourses
           .filter(r => r.course && r.course !== '')
-          .map(r => ({ ...r, batch: r.batch || null })),
+          .map(r => ({ course: r.course, batch: r.batch || null, ratePerClass: Number(r.ratePerClass) || 0 })),
         commissionRates: formData.commissionRates.filter(r => r.course && r.course !== ''),
       };
       if (editMode) {
@@ -295,6 +306,13 @@ const Teachers = () => {
                       {courseBatches.map(b => <MenuItem key={b._id} value={b._id}>{b.name}</MenuItem>)}
                     </Select>
                   </FormControl>
+                  {showPerClass && (
+                    <TextField size="small" label="Rate/Class (PKR)" type="number"
+                      sx={{ flex: '1 1 120px', minWidth: 100 }}
+                      value={r.ratePerClass || ''}
+                      onChange={e => updateAssignedCourse(i, 'ratePerClass', e.target.value)}
+                      InputProps={{ startAdornment: <InputAdornment position="start">PKR</InputAdornment> }} />
+                  )}
                   <IconButton size="small" color="error" onClick={() => removeAssignedCourse(i)}><DeleteIcon fontSize="small" /></IconButton>
                 </Box>
               );
@@ -334,52 +352,6 @@ const Teachers = () => {
                     </Box>
                   </Grid>
                 </Grid>
-              </Box>
-            )}
-
-            {/* Per-Class Rates */}
-            {showPerClass && (
-              <Box sx={{ p: 2, bgcolor: alpha(theme.palette.success.main, 0.04), borderRadius: 2, mb: 2, border: `1px solid ${alpha(theme.palette.success.main, 0.15)}` }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
-                  <Typography variant="body2" fontWeight={700}>Per-Class Rates (by Course/Grade)</Typography>
-                  <Button size="small" startIcon={<AddIcon />} onClick={addPerClassRate} variant="outlined" color="success">Add Rate</Button>
-                </Box>
-                {formData.perClassRates.length === 0 && (
-                  <Typography variant="caption" color="text.secondary">No rates added yet. Click "Add Rate" to configure.</Typography>
-                )}
-                {formData.perClassRates.map((r, i) => {
-                  const courseBatches = batches.filter(b =>
-                    !r.course || String(b.course?._id || b.course) === String(r.course)
-                  );
-                  return (
-                    <Box key={i} sx={{ display: 'flex', gap: 1.5, mb: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
-                      <FormControl size="small" sx={{ flex: '1 1 180px', minWidth: 140 }}>
-                        <InputLabel>Class / Course</InputLabel>
-                        <Select value={r.course} label="Class / Course"
-                          onChange={e => {
-                            updatePerClassRate(i, 'course', e.target.value);
-                            updatePerClassRate(i, 'batch', '');
-                          }}>
-                          {courses.map(c => <MenuItem key={c._id} value={c._id}>{c.name}</MenuItem>)}
-                        </Select>
-                      </FormControl>
-                      <FormControl size="small" sx={{ flex: '1 1 160px', minWidth: 130 }}>
-                        <InputLabel>Batch (Optional)</InputLabel>
-                        <Select value={r.batch || ''} label="Batch (Optional)"
-                          onChange={e => updatePerClassRate(i, 'batch', e.target.value)}>
-                          <MenuItem value=""><em>Any Batch</em></MenuItem>
-                          {courseBatches.map(b => (
-                            <MenuItem key={b._id} value={b._id}>{b.name}</MenuItem>
-                          ))}
-                        </Select>
-                      </FormControl>
-                      <TextField size="small" label="Rate per Class (PKR)" type="number" sx={{ flex: '1 1 130px', minWidth: 110 }}
-                        value={r.ratePerClass} onChange={e => updatePerClassRate(i, 'ratePerClass', e.target.value)}
-                        InputProps={{ startAdornment: <InputAdornment position="start">PKR</InputAdornment> }} />
-                      <IconButton size="small" color="error" onClick={() => removePerClassRate(i)}><DeleteIcon fontSize="small" /></IconButton>
-                    </Box>
-                  );
-                })}
               </Box>
             )}
 

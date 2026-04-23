@@ -50,6 +50,7 @@ const teacherSchema = mongoose.Schema(
       {
         course: { type: mongoose.Schema.Types.ObjectId, ref: 'Course' },
         batch: { type: mongoose.Schema.Types.ObjectId, ref: 'Batch', default: null },
+        ratePerClass: { type: Number, default: 0 },
       },
     ],
     bankDetails: {
