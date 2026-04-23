@@ -12,6 +12,30 @@ API.interceptors.request.use((req) => {
   return req;
 });
 
+// Response interceptor to handle errors gracefully
+API.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response) {
+      const status = error.response.status;
+      if (status === 401 || status === 403) {
+        // Unauthorized or forbidden — clear profile and redirect to login
+        localStorage.removeItem('profile');
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login';
+        }
+      } else if (status >= 500) {
+        // Server error — log but don't crash
+        console.error('Server error:', error.response.data?.message || error.message);
+      }
+    } else if (error.request) {
+      // Network error (no response) — log but don't crash
+      console.error('Network error:', error.message);
+    }
+    return Promise.reject(error);
+  }
+);
+
 export const signIn = (formData) => API.post('/users/login', formData);
 export const register = (formData) => API.post('/users', formData);
 

@@ -80,11 +80,19 @@ function App() {
       }
     };
 
+    // Handle unhandled promise rejections to prevent crashes
+    const handleUnhandledRejection = (event) => {
+      console.error('Unhandled promise rejection:', event.reason);
+      event.preventDefault();
+    };
+
     window.addEventListener('error', handleResizeObserverError);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
 
     return () => {
         console.error = originalError;
         window.removeEventListener('error', handleResizeObserverError);
+        window.removeEventListener('unhandledrejection', handleUnhandledRejection);
     }
   }, []);
 
