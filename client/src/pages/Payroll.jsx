@@ -49,7 +49,7 @@ const generatePayslipHTML = (payroll, companyName) => {
   const deductionRows = (payroll.deductionDetails || []).map(d => `
     <tr>
       <td style="padding:6px 12px;">${d.description || 'Deduction'}</td>
-      <td style="padding:6px 12px;text-align:right;color:#d32f2f;">PKR ${Number(d.amount).toLocaleString()}</td>
+      <td style="padding:6px 12px;text-align:right;color:#000000;">PKR ${Number(d.amount).toLocaleString()}</td>
     </tr>`).join('');
 
   return `<!DOCTYPE html>
@@ -61,15 +61,15 @@ const generatePayslipHTML = (payroll, companyName) => {
     * { margin:0; padding:0; box-sizing:border-box; }
     body { font-family: Arial, sans-serif; font-size: 13px; color: #222; background:#fff; }
     .page { width:700px; margin:30px auto; border:1px solid #ccc; border-radius:6px; overflow:hidden; }
-    .header { background: linear-gradient(135deg, #1B5E20, #43A047); color:#fff; padding:16px 28px; }
+    .header { background: linear-gradient(135deg, #000000, #333333); color:#fff; padding:16px 28px; }
     .header-inner { display:flex; align-items:center; gap:14px; }
     .header-logo { width:56px; height:56px; object-fit:contain; flex-shrink:0; border-radius:50%; background:#fff; padding:3px; }
     .header-logo-placeholder { width:56px; height:56px; border-radius:50%; background:rgba(255,255,255,0.2); display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:900; color:#fff; flex-shrink:0; }
     .header h1 { font-size:20px; font-weight:900; letter-spacing:0.5px; margin:0; }
     .header h2 { font-size:12px; font-weight:600; margin:2px 0 0; opacity:0.9; letter-spacing:1px; text-transform:uppercase; }
     .header p { font-size:11px; opacity:0.75; margin:3px 0 0; }
-    .payslip-title { background:#f5f5f5; text-align:center; padding:10px; border-bottom:2px solid #1565C0; }
-    .payslip-title h2 { font-size:16px; font-weight:800; color:#1565C0; letter-spacing:3px; }
+    .payslip-title { background:#f5f5f5; text-align:center; padding:10px; border-bottom:2px solid #000000; }
+    .payslip-title h2 { font-size:16px; font-weight:800; color:#000000; letter-spacing:3px; }
     .payslip-title span { font-size:12px; color:#666; }
     .employee-grid { display:grid; grid-template-columns:1fr 1fr; gap:0; border-bottom:1px solid #ddd; }
     .emp-col { padding:14px 20px; }
@@ -78,17 +78,17 @@ const generatePayslipHTML = (payroll, companyName) => {
     .emp-label { font-size:11px; color:#888; text-transform:uppercase; letter-spacing:0.5px; }
     .emp-value { font-size:13px; font-weight:700; color:#222; }
     table { width:100%; border-collapse:collapse; }
-    .section-header { background:#1565C0; color:#fff; padding:8px 12px; font-size:12px; font-weight:700; letter-spacing:1px; }
+    .section-header { background:#000000; color:#fff; padding:8px 12px; font-size:12px; font-weight:700; letter-spacing:1px; }
     tr:nth-child(even) { background:#f9f9f9; }
-    .total-row td { font-weight:800; background:#E3F2FD; font-size:13px; padding:10px 12px; border-top:2px solid #1565C0; }
-    .deduction-total td { font-weight:800; background:#FFEBEE; font-size:13px; padding:10px 12px; border-top:2px solid #d32f2f; }
-    .net-row td { font-weight:800; background:#1565C0; color:#fff; font-size:15px; padding:12px; border-top:3px solid #0d47a1; }
+    .total-row td { font-weight:800; background:#f0f0f0; font-size:13px; padding:10px 12px; border-top:2px solid #000000; }
+    .deduction-total td { font-weight:800; background:#f0f0f0; font-size:13px; padding:10px 12px; border-top:2px solid #000000; }
+    .net-row td { font-weight:800; background:#000000; color:#fff; font-size:15px; padding:12px; border-top:3px solid #000000; }
     .footer { display:grid; grid-template-columns:1fr 1fr; border-top:1px solid #ddd; padding:20px; gap:20px; }
     .sig-box { border-top:1px solid #555; padding-top:6px; margin-top:30px; font-size:11px; color:#666; text-align:center; }
     .status-badge { display:inline-block; padding:3px 12px; border-radius:20px; font-size:11px; font-weight:800; }
-    .status-paid { background:#E8F5E9; color:#2E7D32; }
-    .status-approved { background:#E3F2FD; color:#1565C0; }
-    .status-draft { background:#FFF8E1; color:#F57F17; }
+    .status-paid { background:#f0f0f0; color:#000000; }
+    .status-approved { background:#f0f0f0; color:#000000; }
+    .status-draft { background:#f0f0f0; color:#000000; }
     @media print {
       body { background:#fff; }
       .page { margin:0; border:none; border-radius:0; width:100%; }
@@ -136,7 +136,7 @@ const generatePayslipHTML = (payroll, companyName) => {
     <table style="margin-top:0;">
       <tr><td colspan="2" class="section-header">DEDUCTIONS</td></tr>
       ${deductionRows}
-      <tr class="deduction-total"><td>TOTAL DEDUCTIONS</td><td style="text-align:right;color:#d32f2f;">PKR ${Number(deductions).toLocaleString()}</td></tr>
+      <tr class="deduction-total"><td>TOTAL DEDUCTIONS</td><td style="text-align:right;color:#000000;">PKR ${Number(deductions).toLocaleString()}</td></tr>
     </table>` : ''}
     <!-- Net Salary -->
     <table>

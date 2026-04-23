@@ -87,8 +87,8 @@ const StatCard = ({ title, value, icon, color, subtitle }) => {
 };
 
 // ─── Voucher Print Template ───────────────────────────────────────────────────
-const VOUCHER_BLUE = '#1565C0';
-const VOUCHER_GREEN = '#2E7D32';
+const VOUCHER_BLUE = '#000000';
+const VOUCHER_GREEN = '#000000';
 
 const VoucherCopyBlock = ({ voucher, company, copyType }) => {
   const month = moment(voucher.month).format('MMMM YYYY');
@@ -135,7 +135,7 @@ const VoucherCopyBlock = ({ voucher, company, copyType }) => {
         ].map(([label, value], i) => (
           <div key={i}>
             <div style={{ fontSize: 7.5, color: '#999', lineHeight: 1 }}>{label}</div>
-            <div style={{ fontSize: 9, fontWeight: 700, color: i === 2 && isOverdue ? '#c62828' : '#212121', lineHeight: 1.3 }}>{value}</div>
+            <div style={{ fontSize: 9, fontWeight: 700, color: i === 2 && isOverdue ? '#000000' : '#212121', lineHeight: 1.3 }}>{value}</div>
           </div>
         ))}
       </div>
@@ -155,28 +155,28 @@ const VoucherCopyBlock = ({ voucher, company, copyType }) => {
               ))}
             </div>
             {(voucher.enrollments || []).map((e, i) => (
-              <div key={i} style={{ display: 'grid', gridTemplateColumns: cols, padding: '3px 8px', background: i % 2 === 0 ? '#fff' : '#f9fafe', borderTop: '1px solid #eee' }}>
+              <div key={i} style={{ display: 'grid', gridTemplateColumns: cols, padding: '3px 8px', background: i % 2 === 0 ? '#fff' : '#f5f5f5', borderTop: '1px solid #eee' }}>
                 <div style={{ fontSize: 8.5, color: '#333' }}>{e.courseName}</div>
                 <div style={{ fontSize: 8.5, textAlign: 'right', color: '#555' }}>{fmt(e.monthlyFee)}</div>
-                <div style={{ fontSize: 8.5, textAlign: 'right', color: e.discount > 0 ? '#c62828' : '#aaa' }}>
+                <div style={{ fontSize: 8.5, textAlign: 'right', color: e.discount > 0 ? '#000000' : '#aaa' }}>
                   {e.discount > 0 ? `-${fmt(e.discount)}` : '—'}
                 </div>
                 <div style={{ fontSize: 8.5, textAlign: 'right', fontWeight: 700 }}>{fmt(e.netFee)}</div>
               </div>
             ))}
             {voucher.admissionFee > 0 && (
-              <div style={{ display: 'grid', gridTemplateColumns: cols, padding: '3px 8px', background: '#FFF8E1', borderTop: '1px solid #eee' }}>
-                <div style={{ fontSize: 8.5, color: '#E65100', fontWeight: 600 }}>Admission Fee</div>
-                <div style={{ fontSize: 8.5, textAlign: 'right', color: '#E65100' }}>{fmt(voucher.admissionFee)}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: cols, padding: '3px 8px', background: '#f0f0f0', borderTop: '1px solid #eee' }}>
+                <div style={{ fontSize: 8.5, color: '#000000', fontWeight: 600 }}>Admission Fee</div>
+                <div style={{ fontSize: 8.5, textAlign: 'right', color: '#000000' }}>{fmt(voucher.admissionFee)}</div>
                 <div style={{ fontSize: 8.5, textAlign: 'right', color: '#aaa' }}>—</div>
-                <div style={{ fontSize: 8.5, textAlign: 'right', fontWeight: 700, color: '#E65100' }}>{fmt(voucher.admissionFee)}</div>
+                <div style={{ fontSize: 8.5, textAlign: 'right', fontWeight: 700, color: '#000000' }}>{fmt(voucher.admissionFee)}</div>
               </div>
             )}
             {totalDiscount > 0 && (
               <div style={{ display: 'grid', gridTemplateColumns: cols, padding: '3px 8px', background: '#F5F5F5', borderTop: '1.5px solid #bbb', fontWeight: 800 }}>
                 <div style={{ fontSize: 8.5, color: '#000' }}>TOTAL</div>
                 <div style={{ fontSize: 8.5, textAlign: 'right', color: '#000' }}>{fmt(totalOriginal)}</div>
-                <div style={{ fontSize: 8.5, textAlign: 'right', color: '#c62828' }}>-{fmt(totalDiscount)}</div>
+                <div style={{ fontSize: 8.5, textAlign: 'right', color: '#000000' }}>-{fmt(totalDiscount)}</div>
                 <div style={{ fontSize: 9, textAlign: 'right', color: accentColor }}>{fmt(voucher.totalFee)}</div>
               </div>
             )}
@@ -185,14 +185,14 @@ const VoucherCopyBlock = ({ voucher, company, copyType }) => {
       })()}
 
       {/* ── Totals ── */}
-      <div style={{ background: '#E8F5E9', borderRadius: 3, padding: '5px 8px', marginBottom: 6, border: `1px solid ${accentColor}22` }}>
+      <div style={{ background: '#f5f5f5', borderRadius: 3, padding: '5px 8px', marginBottom: 6, border: `1px solid ${accentColor}22` }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-          <span style={{ fontSize: 8.5, fontWeight: 700, color: VOUCHER_GREEN }}>On Time (by {dueDate.format('DD MMM')}):</span>
-          <span style={{ fontSize: 10, fontWeight: 900, color: VOUCHER_GREEN }}>{fmt(voucher.totalFee)}</span>
+          <span style={{ fontSize: 8.5, fontWeight: 700, color: '#000000' }}>On Time (by {dueDate.format('DD MMM')}):</span>
+          <span style={{ fontSize: 10, fontWeight: 900, color: '#000000' }}>{fmt(voucher.totalFee)}</span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: 8, color: '#c62828' }}>After {dueDate.format('DD MMM')} + late fee {fmt(voucher.lateFeeAmount)}:</span>
-          <span style={{ fontSize: 9, fontWeight: 700, color: '#c62828' }}>{fmt(voucher.totalWithLateFee)}</span>
+          <span style={{ fontSize: 8, color: '#000000' }}>After {dueDate.format('DD MMM')} + late fee {fmt(voucher.lateFeeAmount)}:</span>
+          <span style={{ fontSize: 9, fontWeight: 700, color: '#000000' }}>{fmt(voucher.totalWithLateFee)}</span>
         </div>
       </div>
 
