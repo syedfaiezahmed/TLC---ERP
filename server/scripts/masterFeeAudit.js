@@ -51,14 +51,23 @@ for (const p of fps) {
   feePaymentByVoucher[k] = (feePaymentByVoucher[k] || 0) + p.amount;
 }
 
-let totalInvoiced = 0, totalPaid = 0, totalBalance = 0;
+let totalInvoiced = 0, totalPaid = 0, totalBalance = 0, totalWriteOff = 0, totalRefund = 0, totalVoided = 0;
 
 for (const f of fees) {
-  totalInvoiced += f.totalAmount || 0;
-  totalPaid     += f.paidAmount  || 0;
-  totalBalance  += f.balanceDue  || 0;
+  // Cancelled/voided fees: count their totalAmount as voided, skip formula check
+  if (f.status === 'cancelled') {
+    totalVoided   += f.totalAmount || 0;
+    totalInvoiced += f.totalAmount || 0;
+    continue;
+  }
 
-  // Correct formula: totalAmount = paidAmount + writeOffAmount + refundAmount + balanceDue
+  totalInvoiced += f.totalAmount    || 0;
+  totalPaid     += f.paidAmount     || 0;
+  totalBalance  += f.balanceDue     || 0;
+  totalWriteOff += f.writeOffAmount || 0;
+  totalRefund   += f.refundAmount   || 0;
+
+  // STANDARD formula (active fees only): totalAmount = paidAmount + writeOffAmount + refundAmount + balanceDue
   const writeOff = f.writeOffAmount  || 0;
   const refund   = f.refundAmount    || 0;
   const paid     = f.paidAmount      || 0;
@@ -82,9 +91,11 @@ for (const f of fees) {
   }
 }
 
-console.log(`Fees: ${fees.length}  |  Total Invoiced: PKR ${totalInvoiced.toFixed(2)}  |  Total Paid: PKR ${totalPaid.toFixed(2)}  |  Total Balance: PKR ${totalBalance.toFixed(2)}`);
-console.log(`Formula check: Invoiced(${totalInvoiced.toFixed(2)}) = Paid(${totalPaid.toFixed(2)}) + Balance(${totalBalance.toFixed(2)}) + WriteOff?`);
-const delta = Math.abs(totalInvoiced - totalPaid - totalBalance);
+const cancelled = fees.filter(f => f.status === 'cancelled').length;
+console.log(`Fees: ${fees.length} (${cancelled} cancelled/voided)  |  Invoiced: ${totalInvoiced.toFixed(2)}  |  Paid: ${totalPaid.toFixed(2)}  |  Disc: ${totalWriteOff.toFixed(2)}  |  Voided: ${totalVoided.toFixed(2)}  |  Balance: ${totalBalance.toFixed(2)}`);
+// STANDARD: Invoiced = Paid(cash) + WriteOff(disc) + Refund + Voided + Balance
+const delta = Math.abs(totalInvoiced - totalPaid - totalWriteOff - totalRefund - totalVoided - totalBalance);
+console.log(`Formula: ${totalInvoiced}=${totalPaid}(cash)+${totalWriteOff}(disc)+${totalRefund}(refund)+${totalVoided}(voided)+${totalBalance}(balance)`);
 console.log(`Balance sheet diff: ${delta.toFixed(2)} ${delta < 0.01 ? '✅' : '⚠️  MISMATCH'}\n`);
 
 if (issues.length) issues.forEach(i => console.log(i));
@@ -180,8 +191,9 @@ for (const acct of ledgerAgg) {
 const feeRevEntry = ledgerAgg.find(a => a._id === 'Fee Revenue');
 const feeRevNet   = feeRevEntry ? feeRevEntry.credit - feeRevEntry.debit : 0;
 console.log(`\n  Fee Revenue (Ledger): PKR ${feeRevNet.toFixed(2)}`);
-console.log(`  Fee Invoiced (Fee model): PKR ${totalInvoiced.toFixed(2)}`);
-console.log(`  Diff: PKR ${Math.abs(feeRevNet - totalInvoiced).toFixed(2)} ${Math.abs(feeRevNet - totalInvoiced) < 0.01 ? '✅' : '⚠️  MISMATCH'}`);
+const activeInvoiced = totalInvoiced - totalVoided;
+console.log(`  Fee Invoiced net (active fees): PKR ${activeInvoiced.toFixed(2)}`);
+console.log(`  Diff: PKR ${Math.abs(feeRevNet - activeInvoiced).toFixed(2)} ${Math.abs(feeRevNet - activeInvoiced) < 0.01 ? '✅' : '⚠️  MISMATCH'}`);
 
 // AR vs Outstanding
 const arEntry = ledgerAgg.find(a => a._id === 'Accounts Receivable');
@@ -202,13 +214,17 @@ console.log(`  Balance Check: ${Math.abs(totalCredits - totalDebits) < 0.01 ? '�
 // ──────────────────────────────────────────────────────────────
 console.log('\n\n5. CROSS-SYSTEM RECONCILIATION\n' + sep);
 
-console.log(`  Total Fee Invoiced:  PKR ${totalInvoiced.toFixed(2)}`);
-console.log(`  Total Fee Collected: PKR ${totalActiveAmount.toFixed(2)} (from FeePayment)`);
-console.log(`  Total Outstanding:   PKR ${totalBalance.toFixed(2)} (from Fee.balanceDue)`);
-console.log(`  Collected + Balance: PKR ${(totalActiveAmount + totalBalance).toFixed(2)}`);
+console.log(`  Total Fee Invoiced:   PKR ${totalInvoiced.toFixed(2)} (includes voided)`);
+console.log(`  Total Cash Collected: PKR ${totalActiveAmount.toFixed(2)} (FeePayment.amount)`);
+console.log(`  Total Discounts:      PKR ${totalWriteOff.toFixed(2)} (Fee.writeOffAmount)`);
+console.log(`  Total Refunds:        PKR ${totalRefund.toFixed(2)} (Fee.refundAmount)`);
+console.log(`  Total Voided:         PKR ${totalVoided.toFixed(2)} (cancelled fees)`);
+console.log(`  Total Outstanding:    PKR ${totalBalance.toFixed(2)} (Fee.balanceDue)`);
+console.log(`  Sum:                  PKR ${(totalActiveAmount + totalWriteOff + totalRefund + totalVoided + totalBalance).toFixed(2)}`);
 
-const reconDiff = Math.abs(totalInvoiced - totalActiveAmount - totalBalance);
-console.log(`\n  RECONCILIATION: Invoiced = Collected + Balance?`);
+const reconDiff = Math.abs(totalInvoiced - totalActiveAmount - totalWriteOff - totalRefund - totalVoided - totalBalance);
+console.log(`\n  RECONCILIATION: Invoiced = Cash + Disc + Refund + Voided + Balance?`);
+console.log(`  ${totalInvoiced} = ${totalActiveAmount}+${totalWriteOff}+${totalRefund}+${totalVoided}+${totalBalance} = ${(totalActiveAmount+totalWriteOff+totalRefund+totalVoided+totalBalance).toFixed(2)}`);
 console.log(`  Diff: PKR ${reconDiff.toFixed(2)} ${reconDiff < 0.01 ? '✅  RECONCILES' : '❌  DOES NOT RECONCILE'}`);
 
 // ──────────────────────────────────────────────────────────────

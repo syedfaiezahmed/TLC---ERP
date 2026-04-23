@@ -5,6 +5,7 @@ import {
   getFeeById,
   updateFee,
   deleteFee,
+  voidFee,
   recordPayment,
   recordGenericPayment,
   deletePayment,
@@ -19,6 +20,7 @@ router.route('/company/:companyId').get(protect, authorize('admin', 'accountant'
 router.route('/student/:studentId/payment').post(protect, authorize('admin', 'accountant', 'superadmin'), recordGenericPayment);
 router.route('/payment/:paymentId').delete(protect, authorize('admin', 'accountant', 'superadmin'), deletePayment);
 router.route('/:id/payment').post(protect, authorize('admin', 'accountant', 'superadmin'), recordPayment);
+router.route('/:id/void').post(protect, authorize('admin', 'superadmin'), voidFee);
 router.route('/:feeId/payment/:paymentId').get(protect, authorize('admin', 'accountant', 'superadmin'), getPaymentDetails);
 
 router

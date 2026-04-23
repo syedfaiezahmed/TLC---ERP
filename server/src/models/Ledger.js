@@ -106,6 +106,7 @@ const ledgerSchema = mongoose.Schema(
         'payroll_payment',
         'bad_debt',
         'bad_debt_recovery',
+        'fee_void',
       ],
       required: true,
     },

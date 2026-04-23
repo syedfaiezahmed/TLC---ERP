@@ -373,6 +373,86 @@ const deleteFee = async (req, res) => {
   }
 };
 
+// @desc    Void a fee (CA-correct: reversal journal + mark cancelled — never delete)
+// @route   POST /api/fees/:id/void
+// @access  Private/Admin
+const voidFee = async (req, res) => {
+  try {
+    const fee = await Fee.findById(req.params.id).populate('company').populate('student');
+    if (!fee) return res.status(404).json({ message: 'Fee record not found' });
+    if (!canAccessCompany(req.user, fee.company)) return res.status(401).json({ message: 'Not authorized' });
+    if (fee.status === 'cancelled') return res.status(400).json({ message: 'Fee is already voided/cancelled' });
+
+    // Block void if payments have been received — must refund/cancel payments first
+    const activePayments = await FeePayment.find({ fee: fee._id, status: 'active' });
+    if (activePayments.length > 0) {
+      return res.status(400).json({
+        message: `Cannot void fee with ${activePayments.length} active payment(s). Cancel all payments first.`,
+      });
+    }
+
+    try { await assertPeriodOpen(fee.company._id, fee.date); } catch (lockErr) {
+      return res.status(403).json({ message: lockErr.message });
+    }
+
+    const { reason } = req.body;
+    const companyId = fee.company._id;
+    const studentId = fee.student._id || fee.student;
+    const subTotal  = fee.subTotal  || fee.totalAmount;
+    const taxAmount = fee.taxAmount || 0;
+    const amount    = fee.totalAmount;
+    const journalId = new mongoose.Types.ObjectId().toString();
+    const now       = new Date();
+    const desc      = `VOID: Fee #${fee.feeNumber} — ${fee.student?.name || ''} (${reason || 'voided by admin'})`;
+
+    // REVERSAL ENTRIES: Dr Fee Revenue / Cr AR  (undoes original accrual)
+    const lines = [
+      {
+        company: companyId, student: studentId, fee: fee._id,
+        referenceType: 'fee_void', referenceId: fee._id,
+        reference: `VOID-${fee.feeNumber}`, journalId, date: now, description: desc,
+        debit: subTotal, credit: 0, type: 'fee_void',
+        accountName: 'Fee Revenue', accountType: 'revenue', relatedAccount: 'Accounts Receivable',
+        balance: 0, createdAt: now, updatedAt: now,
+      },
+      {
+        company: companyId, student: studentId, fee: fee._id,
+        referenceType: 'fee_void', referenceId: fee._id,
+        reference: `VOID-AR-${fee.feeNumber}`, journalId, date: now, description: desc,
+        debit: 0, credit: amount, type: 'fee_void',
+        accountName: 'Accounts Receivable', accountType: 'asset', relatedAccount: 'Fee Revenue',
+        balance: 0, createdAt: now, updatedAt: now,
+      },
+    ];
+    if (taxAmount > 0) {
+      lines.push({
+        company: companyId, student: studentId, fee: fee._id,
+        referenceType: 'fee_void', referenceId: fee._id,
+        reference: `VOID-TAX-${fee.feeNumber}`, journalId, date: now, description: desc,
+        debit: taxAmount, credit: 0, type: 'fee_void',
+        accountName: 'Tax Payable', accountType: 'liability', relatedAccount: 'Accounts Receivable',
+        balance: 0, createdAt: now, updatedAt: now,
+      });
+    }
+
+    await Ledger.insertMany(lines);
+
+    fee.status     = 'cancelled';
+    fee.balanceDue = 0;
+    fee.voidedAt   = now;
+    fee.voidReason = reason || 'voided by admin';
+    await fee.save();
+
+    try { await recalculateLedger(companyId, studentId); } catch (_) {}
+    try { await logAudit({ req, companyId, action: 'void_fee', entityType: 'fee', entityId: fee._id, before: { status: 'active', balanceDue: amount }, after: { status: 'cancelled' } }); } catch (_) {}
+
+    return res.json({ message: `Fee #${fee.feeNumber} voided successfully`, fee });
+  } catch (error) {
+    console.error('[voidFee] error:', error.message);
+    if (!res.headersSent) return res.status(400).json({ message: error.message });
+  }
+};
+
 // @desc    Record a payment for a fee
 // @route   POST /api/fees/:id/payment
 // @access  Private/Admin
@@ -682,6 +762,7 @@ export {
   getFeeById,
   updateFee,
   deleteFee,
+  voidFee,
   recordPayment,
   recordGenericPayment,
   deletePayment,

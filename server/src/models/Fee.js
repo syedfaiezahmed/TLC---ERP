@@ -87,6 +87,12 @@ const feeSchema = mongoose.Schema(
       type: Number,
       default: 0.0,
     },
+    voidedAt: {
+      type: Date,
+    },
+    voidReason: {
+      type: String,
+    },
     lateFeeAmount: {
       type: Number,
       default: 0.0,
