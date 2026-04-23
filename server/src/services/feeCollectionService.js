@@ -189,14 +189,19 @@ class FeeCollectionService {
       await voucher.save();
       console.log('[FeeCollection] Voucher updated — new status:', voucher.status, 'paid:', newPaidTotal);
 
-      // ── Update Fee record ────────────────────────────────────────────────────
+      // ── Update Fee record (STANDARD FORMULA everywhere) ──────────────────────
       if (fee) {
         console.log('[FeeCollection] Step 6: Updating fee record');
-        fee.paidAmount = (fee.paidAmount || 0) + numericAmount;
-        fee.balanceDue = Math.max(0, fee.totalAmount - fee.paidAmount);
-        fee.status = fee.paidAmount >= fee.totalAmount - 0.5 ? 'paid'
-                   : fee.paidAmount > 0 ? 'partial'
-                   : 'unpaid';
+        const discApplied = Number(discountAmount) || 0;
+        fee.paidAmount     = (fee.paidAmount || 0) + numericAmount;
+        fee.writeOffAmount = (fee.writeOffAmount || 0) + discApplied;
+        // STANDARD FORMULA: balanceDue = totalAmount - paidAmount - writeOffAmount - refundAmount
+        fee.balanceDue = Math.max(0, Number((
+          fee.totalAmount - fee.paidAmount - (fee.writeOffAmount || 0) - (fee.refundAmount || 0)
+        ).toFixed(2)));
+        if (fee.balanceDue <= 0.01)    { fee.status = 'paid';    fee.balanceDue = 0; }
+        else if (fee.paidAmount > 0)   { fee.status = 'partial'; }
+        else                           { fee.status = 'unpaid';  }
         await fee.save();
         console.log('[FeeCollection] Fee updated — new status:', fee.status);
       }
@@ -358,14 +363,20 @@ class FeeCollectionService {
         console.error('[FeeCollection] Refund journal failed (non-fatal):', jErr.message);
       }
 
-      // Update fee record
+      // Update fee record — recompute from remaining active FeePayments
       if (payment.fee) {
         const fee = await Fee.findById(payment.fee);
         if (fee) {
-          fee.paidAmount = Math.max(0, (fee.paidAmount || 0) - refundAmount);
-          fee.balanceDue = fee.totalAmount - fee.paidAmount;
-          fee.status = fee.paidAmount >= fee.totalAmount - 0.01 ? 'paid'
-            : fee.paidAmount > 0 ? 'partial' : 'unpaid';
+          const activePmts = await FeePayment.find({ fee: payment.fee, status: 'active' });
+          fee.paidAmount    = activePmts.reduce((s, p) => s + p.amount, 0);
+          fee.refundAmount  = (fee.refundAmount || 0) + refundAmount;
+          // STANDARD FORMULA: balanceDue = totalAmount - paidAmount - writeOffAmount - refundAmount
+          fee.balanceDue = Math.max(0, Number((
+            fee.totalAmount - fee.paidAmount - (fee.writeOffAmount || 0) - (fee.refundAmount || 0)
+          ).toFixed(2)));
+          if (fee.balanceDue <= 0.01)   { fee.status = 'paid';    fee.balanceDue = 0; }
+          else if (fee.paidAmount > 0)  { fee.status = 'partial'; }
+          else                          { fee.status = 'unpaid';  }
           await fee.save();
         }
       }

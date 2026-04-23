@@ -238,7 +238,19 @@ const getFeeById = async (req, res) => {
 
     if (!fee) return res.status(404).json({ message: 'Fee record not found' });
     if (!canAccessCompany(req.user, fee.company)) return res.status(401).json({ message: 'Not authorized' });
-    return res.json(fee);
+
+    // Fetch FeePayment records for this fee (single source of truth)
+    const feePayments = await FeePayment.find({ fee: fee._id, status: 'active' })
+      .populate('receivedBy', 'name')
+      .sort({ paymentDate: 1 })
+      .lean();
+
+    const feeObj = fee.toObject();
+    feeObj.feePayments = feePayments;
+    // Computed summary
+    feeObj.totalCollected = feePayments.reduce((s, p) => s + p.amount, 0);
+    feeObj.totalDiscount  = feePayments.reduce((s, p) => s + (p.discountAmount || 0), 0);
+    return res.json(feeObj);
   } catch (error) {
     if (!res.headersSent) return res.status(500).json({ message: error.message });
   }
@@ -367,7 +379,7 @@ const deleteFee = async (req, res) => {
 const recordPayment = async (req, res) => {
   try {
     const { amount, date, method, reference, notes, discount = 0 } = req.body;
-    const fee = await Fee.findById(req.params.id).populate('company');
+    const fee = await Fee.findById(req.params.id).populate('company').populate('student');
 
     if (!fee) return res.status(404).json({ message: 'Fee record not found' });
     if (!canAccessCompany(req.user, fee.company)) return res.status(401).json({ message: 'Not authorized' });
@@ -389,9 +401,10 @@ const recordPayment = async (req, res) => {
       return res.status(400).json({ message: `Payment (${payAmount}) + discount (${discAmount}) exceeds balance due (${fee.balanceDue})` });
     }
 
+    // ── Post settlement journal: Dr Cash / Cr AR ────────────────────────────
     await postFeePaymentJournal({
         companyId: fee.company._id,
-        studentId: fee.student,
+        studentId: fee.student._id || fee.student,
         fee: fee,
         date: date || Date.now(),
         amount: payAmount,
@@ -400,37 +413,63 @@ const recordPayment = async (req, res) => {
         paymentMethod: method || 'Cash',
     });
 
-    fee.paidAmount = (fee.paidAmount || 0) + payAmount;
+    // ── Create FeePayment record (single source of truth) ───────────────────
+    const payDate = date ? new Date(date) : new Date();
+    const currentYear = payDate.getUTCFullYear();
+    const startOfYear = new Date(Date.UTC(currentYear, 0, 1));
+    const endOfYear = new Date(Date.UTC(currentYear, 11, 31, 23, 59, 59, 999));
+    const count = await FeePayment.countDocuments({ company: fee.company._id, paymentDate: { $gte: startOfYear, $lte: endOfYear } });
+    const paymentNumber = `PAY-${currentYear}-${String(count + 1).padStart(6, '0')}`;
+
+    const feePayment = new FeePayment({
+      paymentNumber,
+      company: fee.company._id,
+      student: fee.student._id || fee.student,
+      fee: fee._id,
+      amount: payAmount,
+      paymentMethod: method || 'Cash',
+      paymentDate: payDate,
+      referenceNumber: reference || undefined,
+      discountApplied: discAmount > 0,
+      discountAmount: discAmount,
+      receivedBy: req.user._id,
+      notes: notes || undefined,
+      academicYear: currentYear + '-' + (currentYear + 1),
+      month: new Date(Date.UTC(payDate.getUTCFullYear(), payDate.getUTCMonth(), 1)),
+      status: 'active',
+    });
+    await feePayment.save();
+
+    // ── Update fee totals (standard formula everywhere) ───────────────────────
+    fee.paidAmount     = (fee.paidAmount || 0) + payAmount;
     fee.writeOffAmount = (fee.writeOffAmount || 0) + discAmount;
-    fee.balanceDue = fee.totalAmount - fee.paidAmount - fee.writeOffAmount - (fee.creditNoteAmount || 0);
-    
+    // STANDARD FORMULA: balanceDue = totalAmount - paidAmount - writeOffAmount - refundAmount
+    fee.balanceDue = Math.max(0, Number((
+      fee.totalAmount - fee.paidAmount - (fee.writeOffAmount || 0) - (fee.refundAmount || 0)
+    ).toFixed(2)));
+
     if (fee.balanceDue <= 0.01) {
         fee.status = 'paid';
         fee.balanceDue = 0;
-    } else {
+    } else if (fee.paidAmount > 0) {
         fee.status = 'partial';
+    } else {
+        fee.status = 'unpaid';
     }
-
-    fee.payments.push({
-        date: date || Date.now(),
-        amount: payAmount,
-        method: method || 'Cash',
-        reference: reference,
-        discount: discAmount
-    });
 
     const updatedFee = await fee.save();
     try { await logAudit({ req, companyId: fee.company._id, action: 'payment', entityType: 'fee', entityId: fee._id, before: null, after: { amount: payAmount, date: date || Date.now(), method, reference } }); } catch(_) {}
     try {
       const pmCashAcc = (method && method !== 'Cash') ? 'Bank' : 'Cash';
+      const sid = fee.student._id || fee.student;
       await Promise.all([
-        recalculateLedger(fee.company._id, fee.student),
+        recalculateLedger(fee.company._id, sid),
         recalculateLedger(fee.company._id, null, pmCashAcc),
         recalculateLedger(fee.company._id, null, 'Accounts Receivable'),
       ]);
     } catch(lErr) { console.error('[recordPayment] ledger error:', lErr.message); }
 
-    return res.json(updatedFee);
+    return res.json({ ...updatedFee.toObject(), feePayment });
 
   } catch (error) {
     console.error('[recordPayment] error:', error.message);
@@ -542,18 +581,36 @@ const deletePayment = async (req, res) => {
             feePayment.status = 'cancelled';
             await feePayment.save();
 
-            // Reverse journal entries
+            // Reverse journal entries for ALL referenceTypes linked to this payment
             const cid = feePayment.company?._id || feePayment.company;
-            await Ledger.deleteMany({ company: cid, referenceType: 'fee_payment', referenceId: feePayment._id });
-            await Ledger.deleteMany({ company: cid, referenceType: 'fee_collection', referenceId: feePayment._id });
+            await Ledger.deleteMany({ company: cid, referenceId: feePayment._id });
+            // Also delete payment-type entries referencing the parent fee
+            await Ledger.deleteMany({ company: cid, referenceType: 'payment', referenceId: feePayment.fee, type: 'payment' });
 
-            // Revert voucher status if applicable
-            if (feePayment.voucher) {
-                const voucher = await FeeVoucher.findById(feePayment.voucher);
-                if (voucher && voucher.status === 'paid') {
-                    const otherActive = await FeePayment.countDocuments({ voucher: feePayment.voucher, status: 'active', _id: { $ne: feePayment._id } });
-                    if (otherActive === 0) { voucher.status = 'pending'; voucher.paidAmount = 0; await voucher.save(); }
+            // Sync fee.paidAmount & balanceDue from remaining active FeePayments
+            if (feePayment.fee) {
+                const feeDoc = await Fee.findById(feePayment.fee);
+                if (feeDoc) {
+                    const activePmts = await FeePayment.find({ fee: feePayment.fee, status: 'active' });
+                    const newPaid = activePmts.reduce((s, p) => s + p.amount, 0);
+                    const newDiscount = activePmts.reduce((s, p) => s + (p.discountAmount || 0), 0);
+                    feeDoc.paidAmount     = newPaid;
+                    feeDoc.writeOffAmount = newDiscount;
+                    // STANDARD FORMULA
+                    feeDoc.balanceDue = Math.max(0, Number((
+                      feeDoc.totalAmount - feeDoc.paidAmount - (feeDoc.writeOffAmount || 0) - (feeDoc.refundAmount || 0)
+                    ).toFixed(2)));
+                    if (feeDoc.balanceDue <= 0.01)     { feeDoc.status = 'paid';    feeDoc.balanceDue = 0; }
+                    else if (feeDoc.paidAmount > 0)     { feeDoc.status = 'partial'; }
+                    else                                { feeDoc.status = 'unpaid';  }
+                    await feeDoc.save();
                 }
+            }
+
+            // Revert voucher status — use heal service for accuracy
+            if (feePayment.voucher) {
+                const { forceHealVoucherStatuses } = await import('../services/voucherHealService.js');
+                await forceHealVoucherStatuses(cid);
             }
 
             // Recalculate ledgers
