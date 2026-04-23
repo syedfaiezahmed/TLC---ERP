@@ -61,42 +61,58 @@ class FeeCollectionService {
       if (!fee) {
         console.log('[FeeCollection] No fee linked — auto-creating fee record for voucher');
         try {
-          const nextFeeNum = await this._getNextFeeNumber(companyId);
-          fee = new Fee({
+          // Guard: check if a fee already exists for this student+month to avoid duplicates
+          const dueDate = voucher.dueDate ? new Date(voucher.dueDate) : new Date();
+          const monthStart = new Date(Date.UTC(dueDate.getUTCFullYear(), dueDate.getUTCMonth(), 1));
+          const monthEnd   = new Date(Date.UTC(dueDate.getUTCFullYear(), dueDate.getUTCMonth() + 1, 1));
+          const existingFee = await Fee.findOne({
             company: companyId,
             student: voucher.student,
-            feeNumber: nextFeeNum,
-            date: new Date(),
-            dueDate: voucher.dueDate,
-            items: [{
-              description: 'Monthly Fee (auto-generated at payment)',
-              quantity: 1,
-              price: voucher.totalFee,
-              discount: 0,
-              amount: voucher.totalFee,
-              feeType: 'monthly',
-            }],
-            subTotal: voucher.totalFee,
-            totalAmount: voucher.totalFee,
-            balanceDue: voucher.totalFee,
-            status: 'unpaid',
-            lateFeeRule: { amount: voucher.lateFeeAmount || 200, gracePeriodDays: 0 },
+            dueDate: { $gte: monthStart, $lt: monthEnd },
+            status: { $ne: 'cancelled' },
           });
-          await fee.save();
-          // Post accrual journal: Dr AR / Cr Fee Revenue
-          await postFeeJournal({
-            companyId,
-            studentId: voucher.student,
-            fee,
-            date: new Date(),
-            totalAmount: voucher.totalFee,
-            subTotal: voucher.totalFee,
-            taxAmount: 0,
-            cogs: 0,
-          });
-          // Link back to voucher
-          voucher.fee = fee._id;
-          console.log('[FeeCollection] Auto-created fee record with accrual journal:', fee._id);
+          if (existingFee) {
+            fee = existingFee;
+            voucher.fee = fee._id;
+            console.log('[FeeCollection] Reused existing fee record:', fee._id);
+          } else {
+            const nextFeeNum = await this._getNextFeeNumber(companyId);
+            fee = new Fee({
+              company: companyId,
+              student: voucher.student,
+              feeNumber: nextFeeNum,
+              date: new Date(),
+              dueDate: voucher.dueDate,
+              items: [{
+                description: 'Monthly Fee (auto-generated at payment)',
+                quantity: 1,
+                price: voucher.totalFee,
+                discount: 0,
+                amount: voucher.totalFee,
+                feeType: 'monthly',
+              }],
+              subTotal: voucher.totalFee,
+              totalAmount: voucher.totalFee,
+              balanceDue: voucher.totalFee,
+              status: 'unpaid',
+              lateFeeRule: { amount: voucher.lateFeeAmount || 200, gracePeriodDays: 0 },
+            });
+            await fee.save();
+            // Post accrual journal: Dr AR / Cr Fee Revenue
+            await postFeeJournal({
+              companyId,
+              studentId: voucher.student,
+              fee,
+              date: new Date(),
+              totalAmount: voucher.totalFee,
+              subTotal: voucher.totalFee,
+              taxAmount: 0,
+              cogs: 0,
+            });
+            // Link back to voucher
+            voucher.fee = fee._id;
+            console.log('[FeeCollection] Auto-created fee record with accrual journal:', fee._id);
+          }
         } catch (feeErr) {
           console.error('[FeeCollection] Fee auto-create failed (non-fatal):', feeErr.message);
           fee = null;
@@ -291,7 +307,11 @@ class FeeCollectionService {
     if (startDate || endDate) {
       query.paymentDate = {};
       if (startDate) query.paymentDate.$gte = new Date(startDate);
-      if (endDate) query.paymentDate.$lte = new Date(endDate);
+      if (endDate) {
+        const endOfDay = new Date(endDate);
+        endOfDay.setHours(23, 59, 59, 999);
+        query.paymentDate.$lte = endOfDay;
+      }
     }
 
     if (paymentMethod) {
@@ -326,7 +346,8 @@ class FeeCollectionService {
   async getStudentPaymentHistory(studentId, companyId) {
     const payments = await FeePayment.find({
       company: companyId,
-      student: studentId
+      student: studentId,
+      status: 'active'
     })
     .populate('fee', 'feeNumber date totalAmount status')
     .populate('voucher', 'voucherNumber dueDate totalFee')
@@ -383,7 +404,8 @@ class FeeCollectionService {
         const fee = await Fee.findById(payment.fee);
         if (fee) {
           const activePmts = await FeePayment.find({ fee: payment.fee, status: 'active' });
-          fee.paidAmount    = activePmts.reduce((s, p) => s + p.amount, 0);
+          // CA RULE: fee.paidAmount tracks BASE FEE only — exclude late fee portion
+          fee.paidAmount    = activePmts.reduce((s, p) => s + (p.amount - (p.lateFeeAmount || 0)), 0);
           fee.refundAmount  = (fee.refundAmount || 0) + refundAmount;
           // STANDARD FORMULA: balanceDue = totalAmount - paidAmount - writeOffAmount - refundAmount
           fee.balanceDue = Math.max(0, Number((
@@ -527,9 +549,8 @@ class FeeCollectionService {
     const dueDate = new Date(voucher.dueDate);
     dueDate.setHours(0, 0, 0, 0);
     const isOverdue = today > dueDate;
-    const applicableAmount = isOverdue
-      ? (voucher.totalWithLateFee || voucher.totalFee)
-      : voucher.totalFee;
+    // Use base totalFee for validation — late fee is opt-in, never block base-only payment
+    const applicableAmount = voucher.totalFee;
     const balanceDue = applicableAmount - (voucher.paidAmount || 0);
 
     return {

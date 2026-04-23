@@ -6,6 +6,7 @@ import Fee from '../models/Fee.js';
 import { logAudit } from '../services/auditService.js';
 import { canAccessCompany } from '../utils/companyAccess.js';
 import { generateVoucherNumber, calculateTotalFee } from '../utils/feeCalculations.js';
+import voucherService from '../services/voucherService.js';
 
 // @desc    Generate fee voucher for a student for a specific month
 // @route   POST /api/vouchers/generate
@@ -94,6 +95,14 @@ const generateVeeVoucher = async (req, res) => {
     });
 
     const createdVoucher = await voucher.save();
+
+    // Create linked Fee record (accrual entry) — same as bulk generator
+    try {
+      await voucherService.createFeeRecord(createdVoucher, student, voucherEnrollments, 0);
+    } catch (feeErr) {
+      console.error('[generateVeeVoucher] Fee record creation failed (non-fatal):', feeErr.message);
+    }
+
     await logAudit({
       req,
       companyId,
@@ -129,7 +138,12 @@ const getVouchersByCompany = async (req, res) => {
     }
 
     const query = { company: companyId };
-    if (status) query.status = status;
+    // By default hide cancelled vouchers; pass status=cancelled to see them
+    if (status) {
+      query.status = status;
+    } else {
+      query.status = { $ne: 'cancelled' };
+    }
     if (studentId) query.student = studentId;
     if (month) {
       const voucherMonth = new Date(month);
@@ -193,7 +207,7 @@ const getVoucherById = async (req, res) => {
 // @access  Private/Admin
 const recordVoucherPayment = async (req, res) => {
   try {
-    const { amount, paymentMethod, paymentReference, paymentDate } = req.body;
+    const { amount, paymentMethod, paymentReference, paymentDate, discountAmount, notes } = req.body;
 
     const voucher = await FeeVoucher.findById(req.params.id).populate('company');
 
@@ -205,45 +219,23 @@ const recordVoucherPayment = async (req, res) => {
       return res.status(401).json({ message: 'Not authorized' });
     }
 
-    if (voucher.status === 'paid') {
-      return res.status(400).json({ message: 'Voucher is already paid' });
-    }
+    // Delegate to feeCollectionService — ensures FeePayment record + journal are created
+    const { default: feeCollectionService } = await import('../services/feeCollectionService.js');
+    const result = await feeCollectionService.collectFeePayment(
+      {
+        voucherId: req.params.id,
+        amount,
+        paymentMethod: paymentMethod || 'Cash',
+        paymentDate: paymentDate ? new Date(paymentDate) : new Date(),
+        referenceNumber: paymentReference,
+        discountAmount: discountAmount || 0,
+        notes,
+      },
+      voucher.company._id.toString(),
+      req.user._id
+    );
 
-    if (voucher.status === 'cancelled') {
-      return res.status(400).json({ message: 'Cannot record payment for cancelled voucher' });
-    }
-
-    const before = { ...voucher.toObject() };
-
-    // Update voucher
-    voucher.paidAmount = (voucher.paidAmount || 0) + amount;
-    voucher.paidDate = paymentDate || new Date();
-    voucher.paymentMethod = paymentMethod;
-    voucher.paymentReference = paymentReference;
-
-    // Determine applicable amount (with late fee if overdue)
-    const applicableAmount = voucher.getApplicableAmount();
-
-    if (voucher.paidAmount >= applicableAmount) {
-      voucher.status = 'paid';
-    } else if (voucher.paidAmount > 0) {
-      voucher.status = 'partial';
-    }
-
-    const updatedVoucher = await voucher.save();
-    await logAudit({
-      req,
-      companyId: voucher.company._id,
-      action: 'update',
-      entityType: 'voucher',
-      entityId: voucher._id,
-      before,
-      after: updatedVoucher,
-    });
-
-    await updatedVoucher.populate(['student', 'enrollments.course']);
-
-    res.json(updatedVoucher);
+    res.json(result.updatedVoucher);
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
@@ -310,7 +302,7 @@ const getOverdueVouchers = async (req, res) => {
     const overdueVouchers = await FeeVoucher.find({
       company: companyId,
       dueDate: { $lt: today },
-      status: { $in: ['pending', 'partial'] },
+      status: { $in: ['pending', 'partial', 'overdue'] },
     })
       .populate('student', 'name email contact')
       .populate('enrollments.course', 'name')

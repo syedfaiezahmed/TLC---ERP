@@ -209,7 +209,7 @@ const getFeeCollectionReport = async (req, res) => {
             }
         };
 
-        setCache(cacheKey, result, 300); // Cache for 5 minutes
+        setCache(cacheKey, result, 60); // Cache for 60 seconds — short TTL so payment changes are visible quickly
         res.json(result);
 
     } catch (error) {
@@ -390,7 +390,7 @@ const getPendingFeesReport = async (req, res) => {
             filters: { asOfDate, studentId, overdueOnly },
         };
 
-        setCache(cacheKey, result, 300);
+        setCache(cacheKey, result, 60);
         res.json(result);
 
     } catch (error) {
@@ -432,7 +432,11 @@ const getStudentLedgerReport = async (req, res) => {
         const dateInRange = (dateField, qStart, qEnd) => {
             const clause = {};
             if (qStart) clause.$gte = new Date(qStart);
-            if (qEnd) clause.$lte = new Date(qEnd);
+            if (qEnd) {
+                const endOfDay = new Date(qEnd);
+                endOfDay.setHours(23, 59, 59, 999);
+                clause.$lte = endOfDay;
+            }
             return Object.keys(clause).length ? { [dateField]: clause } : {};
         };
 
@@ -556,7 +560,7 @@ const getStudentLedgerReport = async (req, res) => {
             },
         };
 
-        setCache(cacheKey, result, 300);
+        setCache(cacheKey, result, 60);
         res.json(result);
 
     } catch (error) {
@@ -588,6 +592,7 @@ const getSummaryReport = async (req, res) => {
         const companyObjectId = new mongoose.Types.ObjectId(companyId);
         const now = new Date();
         const start = startDate ? new Date(startDate) : new Date(now.getFullYear(), now.getMonth(), 1);
+        start.setHours(0, 0, 0, 0);
         const end = endDate ? new Date(endDate) : now;
         end.setHours(23, 59, 59, 999);
 
@@ -722,7 +727,7 @@ const getSummaryReport = async (req, res) => {
             }
         };
 
-        setCache(cacheKey, result, 300);
+        setCache(cacheKey, result, 60);
         res.json(result);
 
     } catch (error) {
@@ -899,7 +904,7 @@ const getVoucherReport = async (req, res) => {
             }
         };
 
-        setCache(cacheKey, result, 300);
+        setCache(cacheKey, result, 60);
         res.json(result);
 
     } catch (error) {
