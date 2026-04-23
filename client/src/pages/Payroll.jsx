@@ -63,7 +63,7 @@ const generatePayslipHTML = (payroll, companyName) => {
     .page { width:700px; margin:30px auto; border:1px solid #ccc; border-radius:6px; overflow:hidden; }
     .header { background: linear-gradient(135deg, #000000, #333333); color:#fff; padding:16px 28px; }
     .header-inner { display:flex; align-items:center; gap:14px; }
-    .header-logo { width:56px; height:56px; object-fit:contain; flex-shrink:0; border-radius:50%; background:#fff; padding:3px; }
+    .header-logo { width:56px; height:56px; object-fit:contain; flex-shrink:0; border-radius:50%; background:#fff; padding:3px; filter:grayscale(100%); }
     .header-logo-placeholder { width:56px; height:56px; border-radius:50%; background:rgba(255,255,255,0.2); display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:900; color:#fff; flex-shrink:0; }
     .header h1 { font-size:20px; font-weight:900; letter-spacing:0.5px; margin:0; }
     .header h2 { font-size:12px; font-weight:600; margin:2px 0 0; opacity:0.9; letter-spacing:1px; text-transform:uppercase; }

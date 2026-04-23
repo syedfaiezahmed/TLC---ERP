@@ -108,7 +108,7 @@ const VoucherCopyBlock = ({ voucher, company, copyType }) => {
         <img
           src="/logo.png"
           alt="TLC"
-          style={{ width: 36, height: 36, objectFit: 'contain', flexShrink: 0, borderRadius: '50%' }}
+          style={{ width: 36, height: 36, objectFit: 'contain', flexShrink: 0, borderRadius: '50%', filter: 'grayscale(100%)' }}
           onError={e => { e.target.style.display='none'; }}
         />
         <div style={{ flex: 1, minWidth: 0 }}>
