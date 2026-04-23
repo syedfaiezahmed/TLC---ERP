@@ -443,7 +443,7 @@ const recordPayrollPayment = async (req, res) => {
 
 const updatePayroll = async (req, res) => {
   try {
-    const { deductions, deductionDetails, notes } = req.body;
+    const { allowances, allowanceDetails, deductions, deductionDetails, notes } = req.body;
 
     const payroll = await Payroll.findById(req.params.id).populate('company');
     if (!payroll) return res.status(404).json({ message: 'Payroll not found' });
@@ -453,14 +453,15 @@ const updatePayroll = async (req, res) => {
     }
 
     const before = payroll.toObject();
-    if ((deductions !== undefined || deductionDetails) && payroll.status === 'approved') {
-      return res.status(400).json({ message: 'Cannot change deductions after approval. Journal entry is already posted. Delete and re-generate this payroll.' });
+    const hasFinancialChange = allowances !== undefined || allowanceDetails || deductions !== undefined || deductionDetails;
+    if (hasFinancialChange && payroll.status === 'approved') {
+      return res.status(400).json({ message: 'Cannot change allowances/deductions after approval. Delete and re-generate this payroll.' });
     }
-    if (deductions !== undefined) {
-      payroll.deductions = Number(deductions);
-      payroll.netSalary = payroll.totalSalary - Number(deductions);
-    }
-    if (deductionDetails) payroll.deductionDetails = deductionDetails;
+    if (allowances !== undefined) payroll.allowances = Number(allowances);
+    if (allowanceDetails !== undefined) payroll.allowanceDetails = allowanceDetails;
+    if (deductions !== undefined) payroll.deductions = Number(deductions);
+    if (deductionDetails !== undefined) payroll.deductionDetails = deductionDetails;
+    payroll.netSalary = payroll.totalSalary + (payroll.allowances || 0) - (payroll.deductions || 0);
     if (notes !== undefined) payroll.notes = notes;
 
     const updated = await payroll.save();

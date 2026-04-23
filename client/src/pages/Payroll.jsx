@@ -34,6 +34,13 @@ const generatePayslipHTML = (payroll, companyName) => {
   const net = payroll.netSalary || 0;
   const monthStr = moment(payroll.month).format('MMMM YYYY');
 
+  const allowancesTotal = payroll.allowances || 0;
+  const allowanceRows = (payroll.allowanceDetails || []).map(a => `
+    <tr>
+      <td style="padding:6px 12px;color:#155724;">${a.description || 'Allowance'}</td>
+      <td style="padding:6px 12px;text-align:right;color:#155724;">+ PKR ${Number(a.amount).toLocaleString()}</td>
+    </tr>`).join('');
+
   const perClassRows = (sc.perClassEarnings?.breakdown || []).map(b => `
     <tr>
       <td style="padding:6px 12px;">Per-Class: ${b.courseName || '—'}${b.batchName ? ` (${b.batchName})` : ''} — ${b.classCount} classes × PKR ${Number(b.ratePerClass).toLocaleString()}</td>
@@ -131,6 +138,13 @@ const generatePayslipHTML = (payroll, companyName) => {
       ${commissionRows}
       <tr class="total-row"><td>GROSS SALARY</td><td style="text-align:right;">PKR ${Number(gross).toLocaleString()}</td></tr>
     </table>
+    <!-- Allowances -->
+    ${allowancesTotal > 0 ? `
+    <table style="margin-top:0;">
+      <tr><td colspan="2" class="section-header" style="background:#1a7a3a;">ADDITIONAL ALLOWANCES</td></tr>
+      ${allowanceRows}
+      <tr class="total-row" style="color:#155724;"><td>TOTAL ALLOWANCES</td><td style="text-align:right;color:#155724;">+ PKR ${Number(allowancesTotal).toLocaleString()}</td></tr>
+    </table>` : ''}
     <!-- Deductions -->
     ${deductions > 0 ? `
     <table style="margin-top:0;">
@@ -209,7 +223,7 @@ const Payroll = () => {
   const [genForm, setGenForm] = useState({ teacherId: '', month: moment().format('YYYY-MM') });
   const [bulkMonth, setBulkMonth] = useState(moment().format('YYYY-MM'));
   const [payForm, setPayForm] = useState({ paymentMethod: 'Cash', paymentReference: '', paymentDate: moment().format('YYYY-MM-DD') });
-  const [deductionForm, setDeductionForm] = useState({ deductions: 0, deductionDetails: [], notes: '' });
+  const [deductionForm, setDeductionForm] = useState({ allowances: 0, allowanceDetails: [], deductions: 0, deductionDetails: [], notes: '' });
   const [actioning, setActioning] = useState(false);
 
   const loadPayrolls = useCallback(() => {
@@ -305,9 +319,23 @@ const Payroll = () => {
   };
 
   const openDeductionDlg = (p) => {
-    setDeductionForm({ deductions: p.deductions || 0, deductionDetails: p.deductionDetails || [], notes: p.notes || '' });
+    setDeductionForm({
+      allowances: p.allowances || 0, allowanceDetails: p.allowanceDetails || [],
+      deductions: p.deductions || 0, deductionDetails: p.deductionDetails || [],
+      notes: p.notes || '',
+    });
     setDeductionDlg(p);
   };
+
+  const addAllowanceRow = () => setDeductionForm(f => ({ ...f, allowanceDetails: [...f.allowanceDetails, { description: '', amount: 0 }] }));
+  const updateAllowanceRow = (i, field, val) => setDeductionForm(f => {
+    const arr = [...f.allowanceDetails]; arr[i] = { ...arr[i], [field]: val };
+    return { ...f, allowanceDetails: arr, allowances: arr.reduce((s, a) => s + Number(a.amount || 0), 0) };
+  });
+  const removeAllowanceRow = (i) => setDeductionForm(f => {
+    const arr = f.allowanceDetails.filter((_, idx) => idx !== i);
+    return { ...f, allowanceDetails: arr, allowances: arr.reduce((s, a) => s + Number(a.amount || 0), 0) };
+  });
 
   const addDeductionRow = () => setDeductionForm(f => ({
     ...f, deductionDetails: [...f.deductionDetails, { description: '', amount: 0 }]
@@ -413,6 +441,7 @@ const Payroll = () => {
                   <TableCell align="right" sx={{ fontWeight: 700 }}>Per-Class</TableCell>
                   <TableCell align="right" sx={{ fontWeight: 700 }}>Commission</TableCell>
                   <TableCell align="right" sx={{ fontWeight: 700 }}>Gross</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 700 }}>Allowances</TableCell>
                   <TableCell align="right" sx={{ fontWeight: 700 }}>Deductions</TableCell>
                   <TableCell align="right" sx={{ fontWeight: 700 }}>Net Salary</TableCell>
                   <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
@@ -458,6 +487,11 @@ const Payroll = () => {
                       </TableCell>
                       <TableCell align="right">
                         <Typography fontWeight={700}>{fmt(p.totalSalary)}</Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        {p.allowances > 0 ? (
+                          <Typography variant="body2" color="success.main" fontWeight={600}>+{fmt(p.allowances)}</Typography>
+                        ) : <Typography variant="body2" color="text.disabled">—</Typography>}
                       </TableCell>
                       <TableCell align="right">
                         {p.deductions > 0 ? (
@@ -627,30 +661,57 @@ const Payroll = () => {
         </DialogActions>
       </Dialog>
 
-      {/* ─── Deductions Dialog ─── */}
+      {/* ─── Adjustments Dialog (Allowances & Deductions) ─── */}
       <Dialog open={!!deductionDlg} onClose={() => setDeductionDlg(null)} maxWidth="sm" fullWidth>
         <DialogTitle sx={{ fontWeight: 800 }}>
-          <EditIcon sx={{ mr: 1, verticalAlign: 'middle' }} />Deductions & Notes
+          <EditIcon sx={{ mr: 1, verticalAlign: 'middle' }} />Adjustments — Allowances & Deductions
         </DialogTitle>
         <DialogContent sx={{ pt: 2 }}>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Gross: <strong>{fmt(deductionDlg?.totalSalary)}</strong> → Net after deductions: <strong>{fmt((deductionDlg?.totalSalary || 0) - deductionForm.deductions)}</strong>
-          </Typography>
+          <Box sx={{ p: 1.5, bgcolor: alpha(theme.palette.primary.main, 0.04), borderRadius: 1, mb: 2, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
+            <Typography variant="body2">Gross: <strong>{fmt(deductionDlg?.totalSalary)}</strong></Typography>
+            <Typography variant="body2" color="success.main">Allowances: <strong>+{fmt(deductionForm.allowances)}</strong></Typography>
+            <Typography variant="body2" color="error.main">Deductions: <strong>-{fmt(deductionForm.deductions)}</strong></Typography>
+            <Typography variant="body2" fontWeight={800}>Net: <strong>{fmt((deductionDlg?.totalSalary || 0) + deductionForm.allowances - deductionForm.deductions)}</strong></Typography>
+          </Box>
+
+          <Typography variant="subtitle2" fontWeight={700} color="success.main" sx={{ mb: 1 }}>➕ Additional Allowances</Typography>
+          {deductionForm.allowanceDetails.map((a, i) => (
+            <Box key={i} sx={{ display: 'flex', gap: 1.5, mb: 1.5, alignItems: 'center' }}>
+              <TextField size="small" label="Description (e.g. Transport, Bonus)" sx={{ flex: 2 }} value={a.description}
+                onChange={e => updateAllowanceRow(i, 'description', e.target.value)} />
+              <TextField size="small" label="Amount (PKR)" type="number" sx={{ flex: 1 }} value={a.amount}
+                onChange={e => updateAllowanceRow(i, 'amount', e.target.value)} />
+              <IconButton size="small" color="error" onClick={() => removeAllowanceRow(i)}><DeleteIcon fontSize="small" /></IconButton>
+            </Box>
+          ))}
+          <Button size="small" startIcon={<AddIcon />} onClick={addAllowanceRow} color="success" sx={{ mb: 2 }}>Add Allowance</Button>
+          {deductionForm.allowances > 0 && (
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', p: 1, bgcolor: alpha(theme.palette.success.main, 0.08), borderRadius: 1, mb: 2 }}>
+              <Typography fontWeight={700} color="success.main">Total Allowances:</Typography>
+              <Typography fontWeight={800} color="success.main">+ PKR {Number(deductionForm.allowances).toLocaleString()}</Typography>
+            </Box>
+          )}
+
+          <Divider sx={{ mb: 2 }} />
+          <Typography variant="subtitle2" fontWeight={700} color="error.main" sx={{ mb: 1 }}>➖ Deductions</Typography>
           {deductionForm.deductionDetails.map((d, i) => (
             <Box key={i} sx={{ display: 'flex', gap: 1.5, mb: 1.5, alignItems: 'center' }}>
-              <TextField size="small" label="Description" sx={{ flex: 2 }} value={d.description}
+              <TextField size="small" label="Description (e.g. Absence, Advance)" sx={{ flex: 2 }} value={d.description}
                 onChange={e => updateDeductionRow(i, 'description', e.target.value)} />
               <TextField size="small" label="Amount (PKR)" type="number" sx={{ flex: 1 }} value={d.amount}
                 onChange={e => updateDeductionRow(i, 'amount', e.target.value)} />
               <IconButton size="small" color="error" onClick={() => removeDeductionRow(i)}><DeleteIcon fontSize="small" /></IconButton>
             </Box>
           ))}
-          <Button size="small" startIcon={<AddIcon />} onClick={addDeductionRow} sx={{ mb: 2 }}>Add Deduction</Button>
+          <Button size="small" startIcon={<AddIcon />} onClick={addDeductionRow} color="error" sx={{ mb: 2 }}>Add Deduction</Button>
+          {deductionForm.deductions > 0 && (
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', p: 1, bgcolor: alpha(theme.palette.error.main, 0.06), borderRadius: 1, mb: 2 }}>
+              <Typography fontWeight={700} color="error.main">Total Deductions:</Typography>
+              <Typography fontWeight={800} color="error.main">- PKR {Number(deductionForm.deductions).toLocaleString()}</Typography>
+            </Box>
+          )}
+
           <Divider sx={{ mb: 2 }} />
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', p: 1.5, bgcolor: 'error.50', borderRadius: 1, mb: 2 }}>
-            <Typography fontWeight={700}>Total Deductions:</Typography>
-            <Typography fontWeight={800} color="error.main">PKR {Number(deductionForm.deductions).toLocaleString()}</Typography>
-          </Box>
           <TextField label="Notes" fullWidth multiline rows={2} value={deductionForm.notes}
             onChange={e => setDeductionForm(f => ({ ...f, notes: e.target.value }))} />
         </DialogContent>

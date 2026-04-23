@@ -59,6 +59,16 @@ const payrollSchema = mongoose.Schema(
       required: true,
       default: 0,
     },
+    allowances: {
+      type: Number,
+      default: 0,
+    },
+    allowanceDetails: [
+      {
+        description: { type: String },
+        amount: { type: Number, required: true },
+      },
+    ],
     deductions: {
       type: Number,
       default: 0,
@@ -125,7 +135,7 @@ payrollSchema.pre('save', function () {
   }
 
   this.totalSalary = total;
-  this.netSalary = total - (this.deductions || 0);
+  this.netSalary = total + (this.allowances || 0) - (this.deductions || 0);
 });
 
 // Indexes
