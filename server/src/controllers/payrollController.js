@@ -9,6 +9,7 @@ import Payroll from '../models/Payroll.js';
 import Teacher from '../models/Teacher.js';
 import Attendance from '../models/Attendance.js';
 import Fee from '../models/Fee.js';
+import FeeVoucher from '../models/FeeVoucher.js';
 import Company from '../models/Company.js';
 import Ledger from '../models/Ledger.js';
 import { logAudit } from '../services/auditService.js';
@@ -541,6 +542,129 @@ const getPayrollSummary = async (req, res) => {
   }
 };
 
+// ─── Get Detailed Print Data (for enhanced payslip) ──────────────────────────
+
+const getPayrollPrintData = async (req, res) => {
+  try {
+    const payroll = await Payroll.findById(req.params.id)
+      .populate('teacher')
+      .populate('company')
+      .lean();
+
+    if (!payroll) return res.status(404).json({ message: 'Payroll not found' });
+    if (!canAccessCompany(req.user, payroll.company)) return res.status(401).json({ message: 'Not authorized' });
+
+    const d = new Date(payroll.month);
+    const monthStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const { start, end } = monthBounds(monthStr);
+    const monthEnd = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+    const companyId = payroll.company._id;
+    const teacher = payroll.teacher;
+
+    let commissionDetail = [];
+    let classDetail = [];
+
+    // ─── Commission: student-level fee breakdown per course ──────────────────
+    if (payroll.salaryType === 'commission' || payroll.salaryType === 'hybrid') {
+      const rateMap = {};
+      (teacher.commissionRates || []).forEach(r => {
+        const cId = r.course?._id?.toString() || r.course?.toString();
+        if (cId) rateMap[cId] = r.percentage || 0;
+      });
+      const courseIds = Object.keys(rateMap);
+
+      if (courseIds.length > 0) {
+        const vouchers = await FeeVoucher.find({
+          company: companyId,
+          month: { $gte: start, $lt: monthEnd },
+          paidAmount: { $gt: 0 },
+          'enrollments.course': { $in: courseIds.map(id => new mongoose.Types.ObjectId(id)) },
+        }).populate('student', 'name').lean();
+
+        const byCourse = {};
+        vouchers.forEach(v => {
+          (v.enrollments || []).forEach(enr => {
+            const cId = enr.course?.toString();
+            if (!cId || !rateMap[cId]) return;
+            if (!byCourse[cId]) {
+              byCourse[cId] = {
+                courseName: enr.courseName || 'Unknown',
+                commissionRate: rateMap[cId],
+                students: [],
+                totalFees: 0,
+                totalCommission: 0,
+              };
+            }
+            const prop = v.totalFee > 0 ? enr.netFee / v.totalFee : 0;
+            const paid = Math.round(v.paidAmount * prop * 100) / 100;
+            const comm = Math.round(paid * rateMap[cId] / 100 * 100) / 100;
+            byCourse[cId].students.push({ studentName: v.student?.name || 'Unknown', fees: paid, commissionAmount: comm });
+            byCourse[cId].totalFees += paid;
+            byCourse[cId].totalCommission += comm;
+          });
+        });
+
+        commissionDetail = Object.values(byCourse).map(c => ({
+          ...c,
+          totalFees: Math.round(c.totalFees * 100) / 100,
+          totalCommission: Math.round(c.totalCommission * 100) / 100,
+        }));
+      }
+    }
+
+    // ─── Per-Class: day-by-day class sessions ────────────────────────────────
+    if (payroll.salaryType === 'per_class' || payroll.salaryType === 'hybrid') {
+      const records = await Attendance.find({
+        company: companyId,
+        teacher: teacher._id,
+        type: 'Teacher',
+        date: { $gte: start, $lte: end },
+        classHeld: { $ne: false },
+      })
+        .populate('course', 'name')
+        .populate('batch', 'name')
+        .sort({ date: 1 })
+        .lean();
+
+      const sessionMap = {};
+      records.forEach(rec => {
+        const dateStr = rec.date.toISOString().slice(0, 10);
+        const courseId = rec.course?._id?.toString() || '';
+        const batchId = rec.batch?._id?.toString() || '';
+        const key = `${dateStr}::${courseId}::${batchId}`;
+        if (sessionMap[key]) return;
+
+        const ac = (teacher.assignedCourses || []).find(r => {
+          const acC = r.course?._id?.toString() || r.course?.toString() || '';
+          const acB = r.batch?._id?.toString() || r.batch?.toString() || '';
+          return acC === courseId && (acB === batchId || !batchId || !acB);
+        });
+        const pr = (teacher.perClassRates || []).find(r => {
+          const prC = r.course?._id?.toString() || r.course?.toString() || '';
+          const prB = r.batch?._id?.toString() || r.batch?.toString() || '';
+          return prC === courseId && (prB === batchId || !batchId || !prB);
+        });
+        const rate = ac?.ratePerClass || pr?.ratePerClass || 0;
+
+        sessionMap[key] = {
+          date: dateStr,
+          courseName: rec.course?.name || 'Unknown',
+          batchName: rec.batch?.name || null,
+          ratePerClass: rate,
+          amount: rate,
+        };
+      });
+
+      classDetail = Object.values(sessionMap).sort((a, b) => a.date.localeCompare(b.date));
+    }
+
+    return res.json({ payroll, commissionDetail, classDetail });
+  } catch (error) {
+    console.error('[getPayrollPrintData]', error);
+    if (!res.headersSent) return res.status(500).json({ message: error.message });
+  }
+};
+
 export {
   generatePayroll,
   generateBulkPayroll,
@@ -551,4 +675,5 @@ export {
   updatePayroll,
   deletePayroll,
   getPayrollSummary,
+  getPayrollPrintData,
 };

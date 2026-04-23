@@ -244,6 +244,7 @@ export const approvePayroll = (id) => API.put(`/payroll/${id}/approve`);
 export const payPayroll = (id, payload) => API.post(`/payroll/${id}/payment`, payload);
 export const updatePayroll = (id, payload) => API.put(`/payroll/${id}`, payload);
 export const deletePayroll = (id) => API.delete(`/payroll/${id}`);
+export const fetchPayrollPrintData = (id) => API.get(`/payroll/${id}/print-data`);
 
 // ── Assets & Depreciation ───────────────────────────────────────────────────
 export const fetchAssets = (companyId) => API.get(`/assets/company/${companyId}`);

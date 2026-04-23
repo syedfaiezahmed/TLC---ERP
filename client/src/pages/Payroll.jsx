@@ -20,10 +20,11 @@ import {
 } from '@mui/icons-material';
 import moment from 'moment';
 import { toast } from 'react-toastify';
+import { fetchPayrollPrintData } from '../services/api';
 import StatCard from '../components/StatCard';
 
 // ─── Payslip HTML Generator ───────────────────────────────────────────────────
-const generatePayslipHTML = (payroll, companyName) => {
+const generatePayslipHTML = (payroll, companyName, printData = null) => {
   const t = payroll.teacher || {};
   const sc = payroll.salaryComponents || {};
   const fixed = sc.fixedSalary?.amount || 0;
@@ -33,6 +34,71 @@ const generatePayslipHTML = (payroll, companyName) => {
   const deductions = payroll.deductions || 0;
   const net = payroll.netSalary || 0;
   const monthStr = moment(payroll.month).format('MMMM YYYY');
+
+  const { commissionDetail = [], classDetail = [] } = printData || {};
+
+  // ─── Commission detail: student-level table per course ──────────────────────
+  const commissionDetailHTML = commissionDetail.length > 0
+    ? commissionDetail.map(c => {
+        const rows = c.students.map(s =>
+          '<tr>' +
+          '<td style="padding:5px 12px;">' + s.studentName + '</td>' +
+          '<td style="padding:5px 12px;text-align:right;">PKR ' + Number(s.fees).toLocaleString() + '</td>' +
+          '<td style="padding:5px 12px;text-align:center;">' + c.commissionRate + '%</td>' +
+          '<td style="padding:5px 12px;text-align:right;font-weight:700;">PKR ' + Number(s.commissionAmount).toLocaleString() + '</td>' +
+          '</tr>'
+        ).join('');
+        return '<table style="margin-top:8px;width:100%;border-collapse:collapse;">' +
+          '<tr><td colspan="4" class="section-header" style="background:#7a4a00;padding:8px 12px;color:#fff;font-size:12px;font-weight:700;letter-spacing:1px;">' +
+          c.courseName + ' &nbsp;&mdash;&nbsp; Commission Rate: ' + c.commissionRate + '%' +
+          '</td></tr>' +
+          '<tr style="background:#fef3cd;">' +
+          '<th style="padding:6px 12px;text-align:left;font-size:11px;font-weight:700;">Student Name</th>' +
+          '<th style="padding:6px 12px;text-align:right;font-size:11px;font-weight:700;">Fees Collected</th>' +
+          '<th style="padding:6px 12px;text-align:center;font-size:11px;font-weight:700;">Commission %</th>' +
+          '<th style="padding:6px 12px;text-align:right;font-size:11px;font-weight:700;">Your Amount</th>' +
+          '</tr>' +
+          rows +
+          '<tr style="font-weight:800;background:#f0f0f0;border-top:2px solid #000;">' +
+          '<td style="padding:10px 12px;">TOTAL (' + c.students.length + ' students)</td>' +
+          '<td style="padding:10px 12px;text-align:right;">PKR ' + Number(c.totalFees).toLocaleString() + '</td>' +
+          '<td></td>' +
+          '<td style="padding:10px 12px;text-align:right;">PKR ' + Number(c.totalCommission).toLocaleString() + '</td>' +
+          '</tr>' +
+          '</table>';
+      }).join('')
+    : '';
+
+  // ─── Per-class detail: day-by-day attendance log ─────────────────────────
+  const classDetailHTML = classDetail.length > 0
+    ? '<table style="margin-top:8px;width:100%;border-collapse:collapse;">' +
+      '<tr><td colspan="5" style="background:#1a5a2a;padding:8px 12px;color:#fff;font-size:12px;font-weight:700;letter-spacing:1px;">CLASS ATTENDANCE LOG</td></tr>' +
+      '<tr style="background:#d4edda;">' +
+      '<th style="padding:6px 12px;text-align:left;font-size:11px;font-weight:700;">Date</th>' +
+      '<th style="padding:6px 12px;text-align:left;font-size:11px;font-weight:700;">Course</th>' +
+      '<th style="padding:6px 12px;text-align:left;font-size:11px;font-weight:700;">Batch</th>' +
+      '<th style="padding:6px 12px;text-align:right;font-size:11px;font-weight:700;">Rate/Class</th>' +
+      '<th style="padding:6px 12px;text-align:right;font-size:11px;font-weight:700;">Amount</th>' +
+      '</tr>' +
+      classDetail.map((c, idx) => {
+        const d = new Date(c.date);
+        const ds = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+        const bg = idx % 2 === 0 ? '' : 'background:#f9f9f9;';
+        return '<tr style="' + bg + '">' +
+          '<td style="padding:5px 12px;">' + ds + '</td>' +
+          '<td style="padding:5px 12px;">' + c.courseName + '</td>' +
+          '<td style="padding:5px 12px;">' + (c.batchName || '—') + '</td>' +
+          '<td style="padding:5px 12px;text-align:right;">PKR ' + Number(c.ratePerClass).toLocaleString() + '</td>' +
+          '<td style="padding:5px 12px;text-align:right;font-weight:700;">PKR ' + Number(c.amount).toLocaleString() + '</td>' +
+          '</tr>';
+      }).join('') +
+      '<tr style="font-weight:800;background:#000;color:#fff;">' +
+      '<td colspan="3" style="padding:10px 12px;">TOTAL: ' + classDetail.length + ' Classes</td>' +
+      '<td></td>' +
+      '<td style="padding:10px 12px;text-align:right;">PKR ' + Number(classDetail.reduce((s, c) => s + (c.amount || 0), 0)).toLocaleString() + '</td>' +
+      '</tr>' +
+      '</table>'
+    : '';
 
   const allowancesTotal = payroll.allowances || 0;
   const allowanceRows = (payroll.allowanceDetails || []).map(a => `
@@ -138,6 +204,8 @@ const generatePayslipHTML = (payroll, companyName) => {
       ${commissionRows}
       <tr class="total-row"><td>GROSS SALARY</td><td style="text-align:right;">PKR ${Number(gross).toLocaleString()}</td></tr>
     </table>
+    ${classDetailHTML}
+    ${commissionDetailHTML}
     <!-- Allowances -->
     ${allowancesTotal > 0 ? `
     <table style="margin-top:0;">
@@ -178,9 +246,16 @@ const generatePayslipHTML = (payroll, companyName) => {
 </html>`;
 };
 
-const printPayslip = (payroll, companyName) => {
+const printPayslip = async (payroll, companyName) => {
+  let printData = null;
+  try {
+    const res = await fetchPayrollPrintData(payroll._id);
+    printData = res.data;
+  } catch (e) {
+    console.warn('Could not fetch print detail, using summary payslip:', e?.message);
+  }
   const w = window.open('', '_blank');
-  w.document.write(generatePayslipHTML(payroll, companyName));
+  w.document.write(generatePayslipHTML(payroll, companyName, printData));
   w.document.close();
   setTimeout(() => w.print(), 500);
 };
