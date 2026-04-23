@@ -231,10 +231,8 @@ class VoucherController {
         voucher.paidDate = new Date();
         voucher.paidAmount = amountPaid;
 
-        // CA RULE:
-        //   If voucher links to a pre-existing Fee (already has Dr AR / Cr Fee Revenue accrual entry)
-        //   → post settlement: Dr Cash / Cr Accounts Receivable
-        //   If standalone voucher (no prior accrual) → Dr Cash / Cr Fee Revenue (cash basis)
+        // CA RULE: All fees now have accrual entries (either pre-existing or auto-created)
+        // Therefore, all payments post settlement: Dr Cash / Cr Accounts Receivable
         if (prevStatus !== 'paid') {
           try {
             const payMeth = paymentMethod || 'Cash';
@@ -250,21 +248,9 @@ class VoucherController {
                 reference: '',
                 paymentMethod: payMeth,
               });
+              console.log('[updateVoucherStatus] Settlement journal posted (Dr Cash / Cr AR)');
             } else {
-              const cashAccount = (payMeth === 'Bank Transfer' || payMeth === 'Cheque' || payMeth === 'Online') ? 'Bank' : 'Cash';
-              const lateFee = Number(voucher.lateFee || 0);
-              const baseFee = amountPaid - lateFee;
-              const jLines = [
-                { accountName: cashAccount, accountType: 'asset', debit: amountPaid, credit: 0, type: 'fee_payment', student: voucher.student?._id, description: `Fee collected - ${voucher.voucherNumber}` },
-                { accountName: 'Fee Revenue', accountType: 'revenue', debit: 0, credit: lateFee > 0 ? baseFee : amountPaid, type: 'fee_payment', student: voucher.student?._id, description: `Fee Revenue - ${voucher.voucherNumber}` },
-              ];
-              if (lateFee > 0) {
-                jLines.push({ accountName: 'Late Fee Revenue', accountType: 'revenue', debit: 0, credit: lateFee, type: 'fee_payment', student: voucher.student?._id, description: `Late Fee - ${voucher.voucherNumber}` });
-              }
-              await postJournal(
-                { companyId, studentId: voucher.student?._id, date: new Date(), description: `Fee Payment - Voucher #${voucher.voucherNumber}`, referenceType: 'fee_payment', referenceId: voucher._id },
-                jLines
-              );
+              console.warn('[updateVoucherStatus] No linked fee found - skipping journal posting');
             }
           } catch (jErr) { console.error('[updateVoucherStatus] journal error:', jErr.message); }
         }

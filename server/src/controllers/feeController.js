@@ -101,25 +101,16 @@ const createFee = async (req, res) => {
         cogs: 0
     });
 
-    // If marked as PAID on creation, post payment journal
+    // If marked as PAID on creation, post settlement journal
     if (status === 'paid') {
-      try {
-        await postFeePaymentJournal({
-            companyId,
-            studentId,
-            fee: createdFee,
-            date,
-            amount: totalAmount
-        });
-      } catch(jErr) { console.error('[createFee] payment journal error:', jErr.message); }
-        
-      createdFee.paidAmount = totalAmount;
-      createdFee.payments.push({
-          date: date,
-          amount: totalAmount,
-          method: 'Cash',
-          reference: 'Auto-payment on creation'
+      await postFeePaymentJournal({
+          companyId,
+          studentId,
+          fee: createdFee,
+          date,
+          amount: totalAmount
       });
+      createdFee.paidAmount = totalAmount;
       await createdFee.save();
     }
     

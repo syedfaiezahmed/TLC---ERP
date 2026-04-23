@@ -197,50 +197,25 @@ class FeeCollectionService {
         fee.status = fee.paidAmount >= fee.totalAmount - 0.5 ? 'paid'
                    : fee.paidAmount > 0 ? 'partial'
                    : 'unpaid';
-        fee.payments.push({
-          date: payDate,
-          amount: numericAmount,
-          method: paymentMethod,
-          reference: referenceNumber || transactionId || '',
-          discount: Number(discountAmount) || 0,
-        });
         await fee.save();
         console.log('[FeeCollection] Fee updated — new status:', fee.status);
       }
 
       // ── Post journal entry (non-fatal — never block payment on accounting failure) ─
-      // CA RULE:
-      //   Pre-existing fee → Dr Cash / Cr Accounts Receivable  (settles the accrual entry)
-      //   Standalone voucher (no prior fee) → Dr Cash / Cr Fee Revenue  (cash-basis income)
+      // CA RULE: All fees now have accrual entries (either pre-existing or auto-created)
+      // Therefore, all payments post settlement: Dr Cash / Cr Accounts Receivable
       try {
-        if (feeIsPreExisting && fee) {
-          // Settlement journal — accrual entry already posted at fee creation
-          await postFeePaymentJournal({
-            companyId,
-            studentId: voucher.student,
-            fee,
-            date: payDate,
-            amount: numericAmount,
-            discount: Number(discountAmount) || 0,
-            reference: referenceNumber || '',
-            paymentMethod,
-          });
-          console.log('[FeeCollection] Settlement journal posted (Dr Cash / Cr AR)');
-        } else {
-          // Cash-basis income journal — no prior accrual entry exists
-          await postFeeCollectionJournal({
-            companyId,
-            studentId: voucher.student,
-            voucher,
-            payment,
-            paymentAmount: numericAmount,
-            paymentMethod,
-            lateFeeAmount: lateFeeIncluded ? (Number(providedLateFeeAmount) || voucher.lateFeeAmount || 0) : 0,
-            discountAmount: Number(discountAmount) || 0,
-            date: payDate,
-          });
-          console.log('[FeeCollection] Cash-basis income journal posted (Dr Cash / Cr Fee Revenue)');
-        }
+        await postFeePaymentJournal({
+          companyId,
+          studentId: voucher.student,
+          fee,
+          date: payDate,
+          amount: numericAmount,
+          discount: Number(discountAmount) || 0,
+          reference: referenceNumber || '',
+          paymentMethod,
+        });
+        console.log('[FeeCollection] Settlement journal posted (Dr Cash / Cr AR)');
       } catch (jErr) {
         console.error('[FeeCollection] Journal post failed (non-fatal):', jErr.message);
       }
