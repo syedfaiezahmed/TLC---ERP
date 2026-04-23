@@ -78,7 +78,7 @@ const StatusChip = ({ type }) => {
 };
 
 const Courses = () => {
-  const [formData, setFormData] = useState({ name: '', description: '', fee: '', code: '', duration: '', type: 'course', teacherId: '', groupId: '' });
+  const [formData, setFormData] = useState({ name: '', description: '', fee: '', code: '', duration: '', type: 'course', groupId: '' });
   const [currentId, setCurrentId] = useState(null);
   const [open, setOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -90,7 +90,6 @@ const Courses = () => {
   const theme = useTheme();
   const { courses, loading } = useSelector((state) => state.courses);
   const { selectedCompany } = useSelector((state) => state.companies);
-  const { teachers } = useSelector((state) => state.teachers);
   const { groups } = useSelector((state) => state.groups);
   const { companyId } = useParams(); 
   const currentCompanyId = companyId || selectedCompany?._id;
@@ -125,7 +124,7 @@ const Courses = () => {
 
   const clear = () => {
     setCurrentId(null);
-    setFormData({ name: '', description: '', fee: '', code: '', duration: '', type: 'course', teacherId: '', groupId: '' });
+    setFormData({ name: '', description: '', fee: '', code: '', duration: '', type: 'course', groupId: '' });
   };
 
   const handleEdit = (course) => {
@@ -137,7 +136,6 @@ const Courses = () => {
       code: course.code,
       duration: course.duration,
       type: course.type || 'course',
-      teacherId: course.teacher?._id || course.teacher || '',
       groupId: course.group?._id || course.group || ''
     });
     setOpen(true);
@@ -184,7 +182,6 @@ const Courses = () => {
           { header: 'Code', key: 'code', width: 15 },
           { header: 'Duration', key: 'duration', width: 20 },
           { header: 'Fee', key: 'fee', width: 15, format: 'currency', align: 'right' },
-          { header: 'Teacher', key: 'teacher', width: 25 }
       ];
       const title = 'Course Catalog';
       const dateRange = `As of ${moment().format('DD MMM YYYY')}`;
@@ -195,7 +192,6 @@ const Courses = () => {
           code: c.code || '-',
           duration: c.duration || '-',
           fee: c.fee || 0,
-          teacher: c.teacher?.name || '-'
       }));
 
       if (type === 'excel') {
@@ -382,14 +378,13 @@ const Courses = () => {
                 <TableCell sx={{ fontWeight: 700, py: 1, color: 'text.secondary', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: 1 }}>Course Details</TableCell>
                 <TableCell sx={{ fontWeight: 700, py: 1, color: 'text.secondary', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: 1 }}>Group</TableCell>
                 <TableCell sx={{ fontWeight: 700, py: 1, color: 'text.secondary', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: 1 }}>Duration</TableCell>
-                <TableCell sx={{ fontWeight: 700, py: 1, color: 'text.secondary', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: 1 }}>Teacher</TableCell>
                 <TableCell align="right" sx={{ fontWeight: 700, py: 1, color: 'text.secondary', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: 1 }}>Fee (PKR)</TableCell>
                 <TableCell align="right" sx={{ fontWeight: 700, py: 1, color: 'text.secondary', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: 1 }}>Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {loading && filteredCourses.length === 0 ? (
-                <TableRowSkeleton rows={6} cols={7} />
+                <TableRowSkeleton rows={6} cols={6} />
               ) : filteredCourses.map((course) => (
                 <TableRow key={course._id} hover>
                   <TableCell sx={{ py: 0.5 }}>
@@ -417,11 +412,6 @@ const Courses = () => {
                   <TableCell sx={{ py: 0.5 }}>
                       <Typography variant="body2" fontSize="0.875rem">
                           {course.duration || '-'}
-                      </Typography>
-                  </TableCell>
-                  <TableCell sx={{ py: 0.5 }}>
-                      <Typography variant="body2" fontSize="0.875rem">
-                          {course.teacher?.name || '-'}
                       </Typography>
                   </TableCell>
                   <TableCell align="right" sx={{ py: 0.5 }}>
@@ -465,7 +455,7 @@ const Courses = () => {
               ))}
               {filteredCourses.length === 0 && (
                   <TableRow>
-                      <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
+                      <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
                           <Box display="flex" flexDirection="column" alignItems="center" gap={2}>
                               <BookIcon sx={{ fontSize: 48, color: 'text.disabled' }} />
                               <Typography variant="subtitle1" color="text.secondary">
@@ -562,20 +552,6 @@ const Courses = () => {
                             ),
                         }}
                     />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                    <TextField
-                        select name="teacherId" label="Assigned Teacher"
-                        fullWidth size="small"
-                        value={formData.teacherId}
-                        onChange={(e) => setFormData({ ...formData, teacherId: e.target.value })}
-                        variant="outlined"
-                    >
-                        <MenuItem value="">Unassigned</MenuItem>
-                        {teachers.map((t) => (
-                            <MenuItem key={t._id} value={t._id}>{t.name}</MenuItem>
-                        ))}
-                    </TextField>
                 </Grid>
                 <Grid item xs={12} sm={6}>
                     <TextField

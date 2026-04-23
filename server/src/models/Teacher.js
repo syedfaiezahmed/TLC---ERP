@@ -46,6 +46,12 @@ const teacherSchema = mongoose.Schema(
         percentage: { type: Number, required: true }, // e.g., 15 for 15%
       },
     ],
+    assignedCourses: [
+      {
+        course: { type: mongoose.Schema.Types.ObjectId, ref: 'Course' },
+        batch: { type: mongoose.Schema.Types.ObjectId, ref: 'Batch', default: null },
+      },
+    ],
     bankDetails: {
       accountName: { type: String },
       accountNumber: { type: String },

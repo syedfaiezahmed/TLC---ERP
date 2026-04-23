@@ -30,6 +30,7 @@ const emptyForm = () => ({
   openingBalance: '', openingBalanceDate: '',
   salaryType: 'fixed',
   annualSalary: '', fixedSalary: '',
+  assignedCourses: [],
   perClassRates: [],
   commissionRates: [],
   bankDetails: { accountName: '', accountNumber: '', bankName: '' },
@@ -75,6 +76,7 @@ const Teachers = () => {
       salaryType: t.salaryType || 'fixed',
       annualSalary: t.annualSalary || '',
       fixedSalary: t.fixedSalary || '',
+      assignedCourses: (t.assignedCourses || []).map(r => ({ course: r.course?._id || r.course || '', batch: r.batch?._id || r.batch || '' })),
       perClassRates: (t.perClassRates || []).map(r => ({ course: r.course?._id || r.course || '', batch: r.batch?._id || r.batch || '', ratePerClass: r.ratePerClass || 0 })),
       commissionRates: (t.commissionRates || []).map(r => ({ course: r.course?._id || r.course || '', percentage: r.percentage || 0 })),
       bankDetails: t.bankDetails || { accountName: '', accountNumber: '', bankName: '' },
@@ -91,6 +93,12 @@ const Teachers = () => {
   };
 
   const handleChange = (field, value) => setFormData(f => ({ ...f, [field]: value }));
+
+  const addAssignedCourse = () => setFormData(f => ({ ...f, assignedCourses: [...f.assignedCourses, { course: '', batch: '' }] }));
+  const removeAssignedCourse = (i) => setFormData(f => ({ ...f, assignedCourses: f.assignedCourses.filter((_, idx) => idx !== i) }));
+  const updateAssignedCourse = (i, field, val) => setFormData(f => {
+    const arr = [...f.assignedCourses]; arr[i] = { ...arr[i], [field]: val }; return { ...f, assignedCourses: arr };
+  });
 
   const addPerClassRate = () => setFormData(f => ({ ...f, perClassRates: [...f.perClassRates, { course: '', batch: '', ratePerClass: 0 }] }));
   const removePerClassRate = (i) => setFormData(f => ({ ...f, perClassRates: f.perClassRates.filter((_, idx) => idx !== i) }));
@@ -118,6 +126,9 @@ const Teachers = () => {
       const payload = {
         ...formData,
         companyId,
+        assignedCourses: formData.assignedCourses
+          .filter(r => r.course && r.course !== '')
+          .map(r => ({ course: r.course, batch: r.batch || null })),
         perClassRates: formData.perClassRates
           .filter(r => r.course && r.course !== '')
           .map(r => ({ ...r, batch: r.batch || null })),
@@ -254,6 +265,40 @@ const Teachers = () => {
                 </>
               )}
             </Grid>
+
+            <Divider sx={{ my: 2 }} />
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
+              <Typography variant="subtitle2" fontWeight={700} color="primary">📚 Assigned Classes</Typography>
+              <Button size="small" startIcon={<AddIcon />} onClick={addAssignedCourse} variant="outlined">Add Class</Button>
+            </Box>
+            {formData.assignedCourses.length === 0 && (
+              <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>No classes assigned yet. Click "Add Class" to assign.</Typography>
+            )}
+            {formData.assignedCourses.map((r, i) => {
+              const courseBatches = batches.filter(b =>
+                !r.course || String(b.course?._id || b.course) === String(r.course)
+              );
+              return (
+                <Box key={i} sx={{ display: 'flex', gap: 1.5, mb: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <FormControl size="small" sx={{ flex: '1 1 200px', minWidth: 160 }}>
+                    <InputLabel>Class / Course</InputLabel>
+                    <Select value={r.course} label="Class / Course"
+                      onChange={e => { updateAssignedCourse(i, 'course', e.target.value); updateAssignedCourse(i, 'batch', ''); }}>
+                      {courses.map(c => <MenuItem key={c._id} value={c._id}>{c.name}</MenuItem>)}
+                    </Select>
+                  </FormControl>
+                  <FormControl size="small" sx={{ flex: '1 1 180px', minWidth: 140 }}>
+                    <InputLabel>Batch (Optional)</InputLabel>
+                    <Select value={r.batch || ''} label="Batch (Optional)"
+                      onChange={e => updateAssignedCourse(i, 'batch', e.target.value)}>
+                      <MenuItem value=""><em>Any / All Batches</em></MenuItem>
+                      {courseBatches.map(b => <MenuItem key={b._id} value={b._id}>{b.name}</MenuItem>)}
+                    </Select>
+                  </FormControl>
+                  <IconButton size="small" color="error" onClick={() => removeAssignedCourse(i)}><DeleteIcon fontSize="small" /></IconButton>
+                </Box>
+              );
+            })}
 
             <Divider sx={{ my: 2 }} />
             <Typography variant="subtitle2" fontWeight={700} color="primary" sx={{ mb: 1.5 }}>
