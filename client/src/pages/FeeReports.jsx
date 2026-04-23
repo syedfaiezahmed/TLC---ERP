@@ -516,8 +516,9 @@ const Reports = () => {
               >
                 <MenuItem value="">All</MenuItem>
                 <MenuItem value="paid">Paid</MenuItem>
-                <MenuItem value="unpaid">Unpaid</MenuItem>
+                <MenuItem value="pending">Pending</MenuItem>
                 <MenuItem value="partial">Partial</MenuItem>
+                <MenuItem value="overdue">Overdue</MenuItem>
               </Select>
             </FormControl>
           </Grid>

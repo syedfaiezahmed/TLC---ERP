@@ -32,18 +32,25 @@ const getFeeCollectionReport = async (req, res) => {
         if (cached) return res.json(cached);
 
         const companyObjectId = new mongoose.Types.ObjectId(companyId);
-        const matchStage = { company: companyObjectId, status: status || 'active' };
+        // Always filter active payments only — FeePayment.status is 'active'|'cancelled'|'refunded'
+        // The UI's 'paid/unpaid/partial' reflects Fee/Voucher status, not FeePayment status.
+        // We apply it below after the fee $lookup instead.
+        const matchStage = { company: companyObjectId, status: 'active' };
 
-        // Date filtering
+        // Date filtering — endDate must cover full day (set to 23:59:59 local)
         if (startDate && endDate) {
+            const endOfDay = new Date(endDate);
+            endOfDay.setHours(23, 59, 59, 999);
             matchStage.paymentDate = {
                 $gte: new Date(startDate),
-                $lte: new Date(endDate)
+                $lte: endOfDay
             };
         } else if (startDate) {
             matchStage.paymentDate = { $gte: new Date(startDate) };
         } else if (endDate) {
-            matchStage.paymentDate = { $lte: new Date(endDate) };
+            const endOfDay = new Date(endDate);
+            endOfDay.setHours(23, 59, 59, 999);
+            matchStage.paymentDate = { $lte: endOfDay };
         }
 
         // Additional filters
@@ -89,21 +96,31 @@ const getFeeCollectionReport = async (req, res) => {
             { $unwind: { path: '$receivedBy', preserveNullAndEmptyArrays: true } }
         ];
 
+        // Status filter — applied on the fee's status after fee $lookup
+        if (status) {
+            // Map UI status values (voucher-centric) to Fee model status values
+            const feeStatusMap = { paid: 'paid', unpaid: 'unpaid', pending: 'unpaid', partial: 'partial', overdue: 'unpaid' };
+            const feeStatus = feeStatusMap[status];
+            if (feeStatus) pipeline.push({ $match: { 'fee.status': feeStatus } });
+        }
+
         // Course and Batch filtering
+        // IMPORTANT: After student $lookup+$unwind, student field is an object.
+        // Use student._id as localField, and match on enrollment.course / enrollment.batch.
         if (courseId || batchId) {
             const enrollmentMatch = {};
-            if (courseId) enrollmentMatch.course = new mongoose.Types.ObjectId(courseId);
-            if (batchId) enrollmentMatch.batch = new mongoose.Types.ObjectId(batchId);
+            if (courseId) enrollmentMatch['enrollment.course'] = new mongoose.Types.ObjectId(courseId);
+            if (batchId) enrollmentMatch['enrollment.batch'] = new mongoose.Types.ObjectId(batchId);
 
             pipeline.push({
                 $lookup: {
                     from: 'studentenrollments',
-                    localField: 'student',
+                    localField: 'student._id',   // student is an object after $unwind
                     foreignField: 'student',
                     as: 'enrollment'
                 }
             });
-            pipeline.push({ $unwind: '$enrollment' });
+            pipeline.push({ $unwind: { path: '$enrollment', preserveNullAndEmptyArrays: false } });
             pipeline.push({ $match: enrollmentMatch });
         }
 
