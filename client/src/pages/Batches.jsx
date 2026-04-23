@@ -3,7 +3,6 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useParams } from 'react-router-dom';
 import { getBatches, createBatch, updateBatch, deleteBatch } from '../redux/batchSlice';
 import { getCourses } from '../redux/courseSlice';
-import { getTeachers } from '../redux/teacherSlice';
 import {
   Container,
   Paper,
@@ -55,7 +54,6 @@ const Batches = () => {
     startTime: '', 
     endTime: '', 
     days: [], 
-    teacher: '',
     status: 'Upcoming'
   });
   const [currentId, setCurrentId] = useState(null);
@@ -66,14 +64,12 @@ const Batches = () => {
   const theme = useTheme();
   const { batches, loading } = useSelector((state) => state.batches);
   const { courses } = useSelector((state) => state.courses);
-  const { teachers } = useSelector((state) => state.teachers);
   const { companyId } = useParams();
 
   useEffect(() => {
     if (companyId) {
       dispatch(getBatches(companyId));
       dispatch(getCourses(companyId));
-      dispatch(getTeachers({ companyId }));
     }
   }, [dispatch, companyId]);
 
@@ -99,7 +95,6 @@ const Batches = () => {
       startTime: batch.startTime || '',
       endTime: batch.endTime || '',
       days: batch.days || [],
-      teacher: batch.teacher?._id || batch.teacher || '',
       status: batch.status || 'Upcoming'
     });
     setOpen(true);
@@ -120,7 +115,6 @@ const Batches = () => {
       startTime: '', 
       endTime: '', 
       days: [], 
-      teacher: '',
       status: 'Upcoming'
     });
   };
@@ -140,7 +134,7 @@ const Batches = () => {
             Batch Management
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Manage student batches, schedules, and assigned teachers.
+            Manage student batches, schedules, and timetables.
           </Typography>
         </Box>
         <Button 
@@ -170,7 +164,6 @@ const Batches = () => {
                 <TableCell sx={{ fontWeight: 700 }}>Batch Name</TableCell>
                 <TableCell sx={{ fontWeight: 700 }}>Course</TableCell>
                 <TableCell sx={{ fontWeight: 700 }}>Schedule</TableCell>
-                <TableCell sx={{ fontWeight: 700 }}>Teacher</TableCell>
                 <TableCell sx={{ fontWeight: 700 }}>Students</TableCell>
                 <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
                 <TableCell align="right" sx={{ fontWeight: 700 }}>Actions</TableCell>
@@ -178,7 +171,7 @@ const Batches = () => {
             </TableHead>
             <TableBody>
               {loading && filteredBatches.length === 0 ? (
-                <TableRowSkeleton rows={5} cols={7} />
+                <TableRowSkeleton rows={5} cols={6} />
               ) : filteredBatches.map((batch) => (
                 <TableRow key={batch._id} hover>
                   <TableCell fontWeight={600}>{batch.name}</TableCell>
@@ -191,7 +184,6 @@ const Batches = () => {
                       {batch.days?.join(', ')}
                     </Typography>
                   </TableCell>
-                  <TableCell>{batch.teacher?.name || 'Unassigned'}</TableCell>
                   <TableCell>
                     <Chip 
                       label={`${batch.students?.length || 0} Students`} 
@@ -223,7 +215,7 @@ const Batches = () => {
               ))}
               {filteredBatches.length === 0 && !loading && (
                 <TableRow>
-                  <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
+                  <TableCell colSpan={6} align="center" sx={{ py: 3 }}>
                     No batches found.
                   </TableCell>
                 </TableRow>
@@ -296,21 +288,6 @@ const Batches = () => {
                         <Checkbox checked={formData.days.indexOf(day) > -1} />
                         <ListItemText primary={day} />
                       </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12}>
-                <FormControl fullWidth>
-                  <InputLabel>Teacher</InputLabel>
-                  <Select
-                    value={formData.teacher}
-                    label="Teacher"
-                    onChange={(e) => setFormData({ ...formData, teacher: e.target.value })}
-                  >
-                    <MenuItem value="">Unassigned</MenuItem>
-                    {teachers.map(teacher => (
-                      <MenuItem key={teacher._id} value={teacher._id}>{teacher.name}</MenuItem>
                     ))}
                   </Select>
                 </FormControl>

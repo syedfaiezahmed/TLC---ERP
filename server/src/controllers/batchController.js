@@ -10,7 +10,6 @@ const getBatches = async (req, res) => {
   try {
     const batches = await Batch.find({ company: req.user.company })
       .populate('course', 'name')
-      .populate('teacher', 'name')
       .populate('students', 'name studentId')
       .sort({ createdAt: -1 });
     res.json(batches);
@@ -29,7 +28,6 @@ const getBatchById = async (req, res) => {
       company: req.user.company 
     })
     .populate('course', 'name')
-    .populate('teacher', 'name')
     .populate('students', 'name studentId email contact');
 
     if (batch) {
@@ -47,7 +45,7 @@ const getBatchById = async (req, res) => {
 // @access  Private
 const createBatch = async (req, res) => {
   try {
-    const { name, course, startTime, endTime, days, teacher, students } = req.body;
+    const { name, course, startTime, endTime, days, students } = req.body;
 
     const batch = new Batch({
       company: req.user.company,
@@ -56,7 +54,6 @@ const createBatch = async (req, res) => {
       startTime,
       endTime,
       days,
-      teacher,
       students
     });
 
@@ -83,7 +80,6 @@ const updateBatch = async (req, res) => {
       batch.startTime = req.body.startTime || batch.startTime;
       batch.endTime = req.body.endTime || batch.endTime;
       batch.days = req.body.days || batch.days;
-      batch.teacher = req.body.teacher || batch.teacher;
       batch.students = req.body.students || batch.students;
       batch.status = req.body.status || batch.status;
 

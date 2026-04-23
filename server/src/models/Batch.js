@@ -29,10 +29,6 @@ const batchSchema = mongoose.Schema(
         enum: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
       },
     ],
-    teacher: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Teacher',
-    },
     students: [
       {
         type: mongoose.Schema.Types.ObjectId,
