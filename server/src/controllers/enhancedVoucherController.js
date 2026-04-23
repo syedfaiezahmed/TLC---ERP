@@ -289,6 +289,7 @@ class VoucherController {
             _id: '$status',
             count: { $sum: 1 },
             totalFee: { $sum: '$totalFee' },
+            totalWithLateFee: { $sum: '$totalWithLateFee' },
             totalPaid: { $sum: '$paidAmount' },
             totalDiscount: { $sum: { $ifNull: ['$paymentDiscountTotal', 0] } },
           }
@@ -315,11 +316,17 @@ class VoucherController {
         // Cash actually collected (settles bank/cash account)
         summary.totalPaidAmount += stat.totalPaid || 0;
         summary.totalDiscountAmount += stat.totalDiscount || 0;
-        // NET balance due = totalFee − (cash received + discount allowed)
+        // NET balance due: for overdue vouchers use totalWithLateFee (late fee is now applicable);
+        // for pending/partial use totalFee (late fee not yet triggered).
         const effectivePaid = (stat.totalPaid || 0) + (stat.totalDiscount || 0);
-        const netDue = Math.max(0, (stat.totalFee || 0) - effectivePaid);
-        if (s === 'pending' || s === 'partial') summary.totalPendingAmount += netDue;
-        if (s === 'overdue') summary.totalOverdueAmount += netDue;
+        if (s === 'overdue') {
+          // Late fee is payable — show total with late fee as amount owed
+          const netDue = Math.max(0, (stat.totalWithLateFee || stat.totalFee || 0) - effectivePaid);
+          summary.totalOverdueAmount += netDue;
+        } else if (s === 'pending' || s === 'partial') {
+          const netDue = Math.max(0, (stat.totalFee || 0) - effectivePaid);
+          summary.totalPendingAmount += netDue;
+        }
       }
 
       res.json({ success: true, statistics: summary });
