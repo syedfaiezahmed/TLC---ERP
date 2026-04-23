@@ -49,12 +49,15 @@ const totalRevenueLedger = await Ledger.aggregate([
 ]).toArray();
 const dashboardTotalRevenue = totalRevenueLedger.length > 0 ? totalRevenueLedger[0].total : 0;
 
-// 2. Total Invoiced Fees (from Fee model)
+// 2. Total Invoiced Fees (from Fee model) - EXCLUDE voided for fair comparison with ledger
 const fees = await Fee.find({}).toArray();
-const totalInvoiced = fees.reduce((sum, f) => sum + (f.totalAmount || 0), 0);
+const activeFees = fees.filter(f => f.status !== 'cancelled');
+const voidedFees = fees.filter(f => f.status === 'cancelled');
+const totalInvoiced = activeFees.reduce((sum, f) => sum + (f.totalAmount || 0), 0);
+const totalVoided = voidedFees.reduce((sum, f) => sum + (f.totalAmount || 0), 0);
 
-// 3. Total Collected via FeePayment (voucher system)
-const payments = await FeePayment.find({}).toArray();
+// 3. Total Collected via FeePayment (voucher system) - FILTER BY COMPANY
+const payments = await FeePayment.find({ company: companyObjectId }).toArray();
 const totalCollectedVoucher = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
 
 // 4. Total Collected via Fee.payments[] (embedded payments)
@@ -76,8 +79,8 @@ const arLedger = await Ledger.aggregate([
 ]).toArray();
 const arBalance = arLedger.length > 0 ? arLedger[0].total : 0;
 
-// 7. Outstanding fees (balanceDue)
-const outstandingFees = fees.reduce((sum, f) => sum + (f.balanceDue || 0), 0);
+// 7. Outstanding fees (balanceDue) - EXCLUDE voided
+const outstandingFees = activeFees.reduce((sum, f) => sum + (f.balanceDue || 0), 0);
 
 console.log('📊 DASHBOARD TOTALS (from Ledger):');
 console.log(`   Total Revenue:       PKR ${dashboardTotalRevenue.toFixed(2)} (incl. Late Fee)`);
@@ -86,8 +89,9 @@ console.log(`   Late Fee Revenue:    PKR ${(dashboardTotalRevenue - dashboardFee
 console.log(`   Accounts Receivable: PKR ${arBalance.toFixed(2)}`);
 
 console.log('\n📋 ACTUAL FEE RECORDS:');
-console.log(`   Total Fees (count):      ${fees.length}`);
-console.log(`   Total Invoiced:          PKR ${totalInvoiced.toFixed(2)}`);
+console.log(`   Total Fees (count):      ${fees.length} (${activeFees.length} active, ${voidedFees.length} voided)`);
+console.log(`   Total Invoiced (active): PKR ${totalInvoiced.toFixed(2)}`);
+console.log(`   Voided Fees:            PKR ${totalVoided.toFixed(2)}`);
 console.log(`   Outstanding (balanceDue): PKR ${outstandingFees.toFixed(2)}`);
 
 console.log('\n💰 COLLECTIONS:');
@@ -127,11 +131,13 @@ if (Math.abs(arVsOutstanding) > 1) {
   console.log(`   ✅  MATCH`);
 }
 
-const collectedVsPayments = (totalCollectedVoucher + totalCollectedEmbedded) - (totalInvoiced - outstandingFees);
-console.log(`\n3. Total Collected vs (Invoiced - Outstanding):`);
-console.log(`   Total Collected:           PKR ${(totalCollectedVoucher + totalCollectedEmbedded).toFixed(2)}`);
-console.log(`   Invoiced - Outstanding:    PKR ${(totalInvoiced - outstandingFees).toFixed(2)}`);
-console.log(`   Difference:                PKR ${collectedVsPayments.toFixed(2)}`);
+const totalDiscounts = activeFees.reduce((sum, f) => sum + (f.writeOffAmount || 0), 0);
+const collectedVsPayments = (totalCollectedVoucher + totalCollectedEmbedded) - (totalInvoiced - outstandingFees - totalDiscounts);
+console.log(`\n3. Total Collected vs (Invoiced - Outstanding - Discounts):`);
+console.log(`   Total Collected:                    PKR ${(totalCollectedVoucher + totalCollectedEmbedded).toFixed(2)}`);
+console.log(`   Invoiced - Outstanding - Discounts: PKR ${(totalInvoiced - outstandingFees - totalDiscounts).toFixed(2)}`);
+console.log(`   Discounts:                         PKR ${totalDiscounts.toFixed(2)}`);
+console.log(`   Difference:                        PKR ${collectedVsPayments.toFixed(2)}`);
 if (Math.abs(collectedVsPayments) > 1) {
   console.log(`   ⚠️  MISMATCH`);
 } else {
