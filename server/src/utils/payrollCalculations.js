@@ -102,7 +102,7 @@ export const calculateCommissionEarnings = (feeCollections, commissionRates) => 
   feeCollections.forEach((collection) => {
     if (!collection.course || !collection.amountCollected) return;
 
-    const courseId = collection.course.toString();
+    const courseId = idToString(collection.course);
     
     if (!breakdown[courseId]) {
       breakdown[courseId] = {
@@ -119,7 +119,7 @@ export const calculateCommissionEarnings = (feeCollections, commissionRates) => 
 
   // Calculate commission based on rates
   Object.keys(breakdown).forEach((courseId) => {
-    const rate = commissionRates.find((r) => r.course.toString() === courseId);
+    const rate = commissionRates.find((r) => idToString(r.course) === courseId);
     if (rate) {
       breakdown[courseId].commissionRate = rate.percentage;
       breakdown[courseId].amount = (breakdown[courseId].feeCollected * rate.percentage) / 100;
@@ -209,6 +209,37 @@ export const getTeacherFeeCollections = (fees, teacherCourses, month) => {
           }
         });
       }
+    });
+  });
+
+  return collections;
+};
+
+export const getTeacherVoucherCollections = (vouchers, teacherCourses) => {
+  if (!Array.isArray(vouchers) || vouchers.length === 0) return [];
+  const courseSet = new Set((teacherCourses || []).map(idToString).filter(Boolean));
+  const collections = [];
+
+  vouchers.forEach((voucher) => {
+    const paidAmount = Number(voucher.paidAmount) || 0;
+    const totalFee = Number(voucher.totalFee) || 0;
+    if (paidAmount <= 0 || totalFee <= 0) return;
+
+    (voucher.enrollments || []).forEach((enrollment) => {
+      const courseId = idToString(enrollment.course);
+      if (!courseId || !courseSet.has(courseId)) return;
+
+      const netFee = Number(enrollment.netFee) || 0;
+      const amountCollected = Math.round((paidAmount * (netFee / totalFee)) * 100) / 100;
+      if (amountCollected <= 0) return;
+
+      collections.push({
+        course: enrollment.course,
+        courseName: enrollment.courseName || 'Unknown Course',
+        amountCollected,
+        paymentDate: voucher.paidDate,
+        feeId: voucher.fee || voucher._id,
+      });
     });
   });
 

@@ -4,11 +4,11 @@ import Attendance from '../src/models/Attendance.js';
 import Batch from '../src/models/Batch.js';
 import Company from '../src/models/Company.js';
 import Course from '../src/models/Course.js';
-import Fee from '../src/models/Fee.js';
+import FeeVoucher from '../src/models/FeeVoucher.js';
 import Payroll from '../src/models/Payroll.js';
 import Teacher from '../src/models/Teacher.js';
 import TeacherClassLog from '../src/models/TeacherClassLog.js';
-import { calculateTeacherPayroll, getTeacherFeeCollections } from '../src/utils/payrollCalculations.js';
+import { calculateTeacherPayroll, getTeacherVoucherCollections } from '../src/utils/payrollCalculations.js';
 
 void Batch;
 void Course;
@@ -115,12 +115,13 @@ const main = async () => {
 
     let feeCollections = [];
     if (teacher.salaryType === 'commission' || teacher.salaryType === 'hybrid') {
-      const fees = await Fee.find({
+      const vouchers = await FeeVoucher.find({
         company: companyId,
-        'items.course': { $in: teacherCourseIds },
-        'payments.0': { $exists: true },
-      }).populate('items.course', 'name').lean();
-      feeCollections = getTeacherFeeCollections(fees, teacherCourseIds, start);
+        month: { $gte: start, $lt: monthEnd },
+        paidAmount: { $gt: 0 },
+        'enrollments.course': { $in: teacherCourseIds.map(id => new mongoose.Types.ObjectId(id)) },
+      }).lean();
+      feeCollections = getTeacherVoucherCollections(vouchers, teacherCourseIds);
     }
 
     const payrollData = calculateTeacherPayroll(teacher, attendanceForCalc, feeCollections);

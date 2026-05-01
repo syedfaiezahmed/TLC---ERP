@@ -22,7 +22,7 @@ import {
 } from '../services/payrollJournalService.js';
 import {
   calculateTeacherPayroll,
-  getTeacherFeeCollections,
+  getTeacherVoucherCollections,
   validatePayrollData,
 } from '../utils/payrollCalculations.js';
 
@@ -142,14 +142,14 @@ const generatePayroll = async (req, res) => {
 
     let feeCollections = [];
     if (teacher.salaryType === 'commission' || teacher.salaryType === 'hybrid') {
-      const fees = await Fee.find({
+      const vouchers = await FeeVoucher.find({
         company: companyId,
-        'items.course': { $in: teacherCourseIds },
-        'payments.0': { $exists: true },
+        month: { $gte: start, $lt: new Date(start.getFullYear(), start.getMonth() + 1, 1) },
+        paidAmount: { $gt: 0 },
+        'enrollments.course': { $in: teacherCourseIds.map(id => new mongoose.Types.ObjectId(id)) },
       })
-        .populate('items.course', 'name')
         .lean();
-      feeCollections = getTeacherFeeCollections(fees, teacherCourseIds, start);
+      feeCollections = getTeacherVoucherCollections(vouchers, teacherCourseIds);
     }
 
     // Calculate salary
@@ -241,14 +241,14 @@ const generateBulkPayroll = async (req, res) => {
 
         let feeCollections = [];
         if (teacher.salaryType === 'commission' || teacher.salaryType === 'hybrid') {
-          const fees = await Fee.find({
+          const vouchers = await FeeVoucher.find({
             company: companyId,
-            'items.course': { $in: teacherCourseIds },
-            'payments.0': { $exists: true },
+            month: { $gte: start, $lt: new Date(start.getFullYear(), start.getMonth() + 1, 1) },
+            paidAmount: { $gt: 0 },
+            'enrollments.course': { $in: teacherCourseIds.map(id => new mongoose.Types.ObjectId(id)) },
           })
-            .populate('items.course', 'name')
             .lean();
-          feeCollections = getTeacherFeeCollections(fees, teacherCourseIds, start);
+          feeCollections = getTeacherVoucherCollections(vouchers, teacherCourseIds);
         }
 
         const payrollData = calculateTeacherPayroll(teacher, attendanceForCalc, feeCollections);
