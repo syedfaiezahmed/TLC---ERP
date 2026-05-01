@@ -17,15 +17,17 @@ export const calculateFixedSalary = (monthlySalary, annualSalary = 0) => {
  * Find the best-matching rate for a (course, batch) pair.
  * Priority: batch+course specific rate → course-only rate (no batch set).
  */
+const idToString = (value) => value?._id?.toString?.() || value?.toString?.() || '';
+
 const findBestRate = (perClassRates, courseId, batchId) => {
   if (batchId) {
     const specific = perClassRates.find(
-      (r) => r.course?.toString() === courseId && r.batch?.toString() === batchId.toString()
+      (r) => idToString(r.course) === courseId && idToString(r.batch) === batchId.toString()
     );
     if (specific) return specific;
   }
   return perClassRates.find(
-    (r) => r.course?.toString() === courseId && !r.batch
+    (r) => idToString(r.course) === courseId && !r.batch
   );
 };
 

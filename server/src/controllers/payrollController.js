@@ -125,15 +125,11 @@ const generatePayroll = async (req, res) => {
 
     const { start, end } = monthBounds(month);
 
-    // Prevent duplicates
     const existing = await Payroll.findOne({
       company: companyId,
       teacher: teacherId,
       month: { $gte: start, $lt: new Date(start.getFullYear(), start.getMonth() + 1, 1) },
     });
-    if (existing) {
-      return res.status(400).json({ message: `Payroll already exists for ${teacher.name} — ${month}` });
-    }
 
     // Build attendance array (for per_class / hybrid)
     const attendanceForCalc = await buildAttendanceForCalc(companyId, teacherId, start, end);
@@ -159,7 +155,7 @@ const generatePayroll = async (req, res) => {
     // Calculate salary
     const payrollData = calculateTeacherPayroll(teacher, attendanceForCalc, feeCollections);
 
-    const payroll = new Payroll({
+    const payload = {
       company: companyId,
       teacher: teacherId,
       month: start,
@@ -168,7 +164,24 @@ const generatePayroll = async (req, res) => {
       totalSalary: payrollData.totalSalary,
       netSalary: payrollData.totalSalary,
       status: 'draft',
-    });
+    };
+
+    if (existing) {
+      if (existing.status !== 'draft') {
+        return res.status(400).json({ message: `Payroll already ${existing.status} for ${teacher.name} — ${month}` });
+      }
+      existing.set(payload);
+      const validation = validatePayrollData(existing);
+      if (!validation.valid) {
+        return res.status(400).json({ message: `Validation failed: ${validation.errors.join(', ')}` });
+      }
+      const updated = await existing.save();
+      void logAudit({ req, companyId, action: 'update', entityType: 'payroll', entityId: updated._id, before: null, after: updated }).catch(() => {});
+      await updated.populate('teacher', 'name email contact salaryType fixedSalary annualSalary specialization bankDetails');
+      return res.json(updated);
+    }
+
+    const payroll = new Payroll(payload);
 
     const validation = validatePayrollData(payroll);
     if (!validation.valid) {
@@ -219,11 +232,6 @@ const generateBulkPayroll = async (req, res) => {
           month: { $gte: start, $lt: new Date(start.getFullYear(), start.getMonth() + 1, 1) },
         });
 
-        if (existing) {
-          results.skipped.push({ teacher: teacher.name, reason: 'Already exists' });
-          continue;
-        }
-
         const attendanceForCalc = await buildAttendanceForCalc(companyId, teacher._id, start, end);
 
         const teacherCourseIds = [
@@ -245,7 +253,7 @@ const generateBulkPayroll = async (req, res) => {
 
         const payrollData = calculateTeacherPayroll(teacher, attendanceForCalc, feeCollections);
 
-        const payroll = await Payroll.create({
+        const payload = {
           company: companyId,
           teacher: teacher._id,
           month: start,
@@ -254,9 +262,20 @@ const generateBulkPayroll = async (req, res) => {
           totalSalary: payrollData.totalSalary,
           netSalary: payrollData.totalSalary,
           status: 'draft',
-        });
+        };
 
-        results.generated.push({ teacher: teacher.name, totalSalary: payrollData.totalSalary, payrollId: payroll._id });
+        if (existing) {
+          if (existing.status !== 'draft') {
+            results.skipped.push({ teacher: teacher.name, reason: `Already ${existing.status}` });
+            continue;
+          }
+          existing.set(payload);
+          const payroll = await existing.save();
+          results.generated.push({ teacher: teacher.name, totalSalary: payrollData.totalSalary, payrollId: payroll._id, refreshed: true });
+        } else {
+          const payroll = await Payroll.create(payload);
+          results.generated.push({ teacher: teacher.name, totalSalary: payrollData.totalSalary, payrollId: payroll._id });
+        }
       } catch (err) {
         results.errors.push({ teacher: teacher.name, error: err.message });
       }
