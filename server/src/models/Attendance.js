@@ -62,6 +62,14 @@ attendanceSchema.index({ company: 1, student: 1, date: 1 });
 attendanceSchema.index({ company: 1, teacher: 1, date: 1 });
 attendanceSchema.index({ company: 1, course: 1, date: 1 });
 attendanceSchema.index({ company: 1, type: 1, date: 1 });
+attendanceSchema.index(
+  { company: 1, type: 1, teacher: 1, date: 1 },
+  { unique: true, partialFilterExpression: { type: 'Teacher' } }
+);
+attendanceSchema.index(
+  { company: 1, type: 1, student: 1, batch: 1, date: 1 },
+  { unique: true, partialFilterExpression: { type: 'Student' } }
+);
 
 const Attendance = mongoose.model('Attendance', attendanceSchema);
 

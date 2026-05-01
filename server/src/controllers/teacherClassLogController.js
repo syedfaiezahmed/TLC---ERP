@@ -158,6 +158,19 @@ const saveClassLogs = async (req, res) => {
     const teacher = await Teacher.findOne({ _id: teacherId, company: companyId }).lean();
     if (!teacher) return res.status(404).json({ message: 'Teacher not found' });
 
+    const teacherAttendance = await Attendance.findOne({
+      company: companyId,
+      teacher: teacherId,
+      type: 'Teacher',
+      status: { $in: ['Present', 'Late'] },
+      date: dayRange(date),
+    }).lean();
+
+    if (!teacherAttendance) {
+      await TeacherClassLog.deleteMany({ company: companyId, teacher: teacherId, date: dayRange(date) });
+      return res.status(400).json({ message: 'Teacher must be Present or Late before saving class logs' });
+    }
+
     const dateObj = new Date(date); dateObj.setHours(0, 0, 0, 0);
 
     // Delete existing logs for this teacher on this date
@@ -165,8 +178,21 @@ const saveClassLogs = async (req, res) => {
 
     if (batchIds.length === 0) return res.json({ message: 'Class logs cleared', count: 0 });
 
+    const allowedBatchIds = new Set(
+      (teacher.assignedCourses || [])
+        .map(ac => ac.batch?.toString())
+        .filter(Boolean)
+    );
+    const invalidBatchIds = batchIds.filter(batchId => !allowedBatchIds.has(batchId.toString()));
+    if (invalidBatchIds.length > 0) {
+      return res.status(400).json({ message: 'One or more selected batches are not assigned to this teacher' });
+    }
+
     // Fetch the batches to get course info
-    const batches = await Batch.find({ _id: { $in: batchIds }, company: companyId }).lean();
+    const batches = await Batch.find({ _id: { $in: batchIds }, company: companyId, status: { $in: ['Ongoing', 'Upcoming'] } }).lean();
+    if (batches.length !== batchIds.length) {
+      return res.status(400).json({ message: 'One or more selected batches are invalid or inactive' });
+    }
 
     const docs = batches.map(b => {
       const rate = (
