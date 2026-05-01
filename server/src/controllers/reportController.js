@@ -831,37 +831,103 @@ const getStudentStatement = async (req, res) => {
         const companyObj = new mongoose.Types.ObjectId(companyId);
         const studentObj = new mongoose.Types.ObjectId(studentId);
 
-        const query = { 
-            company: companyObj,
-            student: studentObj,
+        const dateRange = (field) => {
+            const clause = {};
+            if (startDate) clause.$gte = new Date(startDate);
+            if (endDate) {
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999);
+                clause.$lte = end;
+            }
+            return Object.keys(clause).length ? { [field]: clause } : {};
         };
-
-        if (startDate && endDate) {
-            query.date = { $gte: new Date(startDate), $lte: new Date(endDate) };
-        }
-
-        const ledgerEntries = await Ledger.find(query)
-            .sort({ date: 1, createdAt: 1 })
-            .lean();
 
         let openingBalance = 0;
         if (startDate && !isNaN(new Date(startDate))) {
-            const openingAgg = await Ledger.aggregate([
-                { $match: { company: companyObj, student: studentObj, accountName: 'Accounts Receivable', date: { $lt: new Date(startDate) } } },
-                { $group: { _id: null, bal: { $sum: { $subtract: ['$debit', '$credit'] } } } }
+            const start = new Date(startDate);
+            const [openingVouchers, openingPayments] = await Promise.all([
+                FeeVoucher.find({
+                    company: companyObj,
+                    student: studentObj,
+                    status: { $ne: 'cancelled' },
+                    generatedDate: { $lt: start }
+                }).select('totalFee').lean(),
+                FeePayment.find({
+                    company: companyObj,
+                    student: studentObj,
+                    status: 'active',
+                    paymentDate: { $lt: start }
+                }).select('amount discountAmount').lean()
             ]);
-            openingBalance = openingAgg.length ? openingAgg[0].bal : 0;
+            const openingBilled = openingVouchers.reduce((sum, voucher) => sum + (voucher.totalFee || 0), 0);
+            const openingSettled = openingPayments.reduce((sum, payment) => sum + (payment.amount || 0) + (payment.discountAmount || 0), 0);
+            openingBalance = openingBilled - openingSettled;
         }
+
+        const [vouchers, payments] = await Promise.all([
+            FeeVoucher.find({
+                company: companyObj,
+                student: studentObj,
+                status: { $ne: 'cancelled' },
+                ...dateRange('generatedDate')
+            }).sort({ generatedDate: 1, createdAt: 1 }).lean(),
+            FeePayment.find({
+                company: companyObj,
+                student: studentObj,
+                status: 'active',
+                ...dateRange('paymentDate')
+            }).sort({ paymentDate: 1, createdAt: 1 }).lean()
+        ]);
+
+        const entries = [];
+        vouchers.forEach(voucher => {
+            entries.push({
+                _id: voucher._id,
+                date: voucher.generatedDate,
+                description: `Fee Voucher #${voucher.voucherNumber || voucher._id}`,
+                reference: voucher.voucherNumber,
+                debit: voucher.totalFee || 0,
+                credit: 0,
+                source: 'voucher'
+            });
+        });
+        payments.forEach(payment => {
+            entries.push({
+                _id: payment._id,
+                date: payment.paymentDate,
+                description: `Fee Payment #${payment.paymentNumber}`,
+                reference: payment.referenceNumber || payment.transactionId || payment.paymentNumber,
+                debit: 0,
+                credit: payment.amount || 0,
+                source: 'payment'
+            });
+            if ((payment.discountAmount || 0) > 0) {
+                entries.push({
+                    _id: `${payment._id}-discount`,
+                    date: payment.paymentDate,
+                    description: `Scholarship/Discount on Payment #${payment.paymentNumber}`,
+                    reference: payment.paymentNumber,
+                    debit: 0,
+                    credit: payment.discountAmount || 0,
+                    source: 'discount'
+                });
+            }
+        });
+        entries.sort((a, b) => new Date(a.date) - new Date(b.date));
 
         let totalDebit = 0;
         let totalCredit = 0;
+        let totalReceived = 0;
+        let totalDiscount = 0;
         let runningBalance = openingBalance;
         
-        const statement = ledgerEntries.map(entry => {
+        const statement = entries.map(entry => {
             const dr = entry.debit || 0;
             const cr = entry.credit || 0;
             totalDebit += dr;
             totalCredit += cr;
+            if (entry.source === 'payment') totalReceived += cr;
+            if (entry.source === 'discount') totalDiscount += cr;
             runningBalance += (dr - cr);
             return { ...entry, runningBalance: Number(runningBalance.toFixed(2)) };
         });
@@ -869,7 +935,9 @@ const getStudentStatement = async (req, res) => {
         const summary = {
             openingBalance,
             totalBilled: totalDebit,
-            totalReceived: totalCredit,
+            totalReceived,
+            totalDiscount,
+            totalSettled: totalCredit,
             closingBalance: openingBalance + totalDebit - totalCredit 
         };
 

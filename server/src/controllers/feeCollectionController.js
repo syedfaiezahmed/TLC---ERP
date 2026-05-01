@@ -354,7 +354,11 @@ class FeeCollectionController {
       if (startDate || endDate) {
         matchStage.paymentDate = {};
         if (startDate) matchStage.paymentDate.$gte = new Date(startDate);
-        if (endDate) matchStage.paymentDate.$lte = new Date(endDate);
+        if (endDate) {
+          const endOfDay = new Date(endDate);
+          endOfDay.setHours(23, 59, 59, 999);
+          matchStage.paymentDate.$lte = endOfDay;
+        }
       }
 
       const statistics = await FeePayment.aggregate([
