@@ -1066,56 +1066,12 @@ const getPaymentsReport = async (req, res) => {
         const { companyId } = req.params;
         const { startDate, endDate, studentId } = req.query;
 
-        const query = { 
-            company: new mongoose.Types.ObjectId(companyId) 
-        };
-
-        if (studentId) {
-            query.student = new mongoose.Types.ObjectId(studentId);
-        }
-
-        if (startDate && endDate) {
-            const start = new Date(startDate);
-            start.setHours(0, 0, 0, 0);
-            const end = new Date(endDate);
-            end.setHours(23, 59, 59, 999);
-            // We'll filter payments array in aggregate, but we can filter fees by date range first for efficiency
-            query["payments.date"] = { $gte: start, $lte: end };
-        }
-
-        const fees = await Fee.find(query)
-            .populate('student', 'name email contact')
-            .lean();
-
-        // Flatten payments from all fees
         let allPayments = [];
         const start = startDate ? new Date(startDate) : null;
         if (start) start.setHours(0, 0, 0, 0);
         const end = endDate ? new Date(endDate) : null;
         if (end) end.setHours(23, 59, 59, 999);
 
-        fees.forEach(fee => {
-            (fee.payments || []).forEach(payment => {
-                const payDate = new Date(payment.date);
-                if ((!start || payDate >= start) && (!end || payDate <= end)) {
-                    allPayments.push({
-                        _id: payment._id,
-                        feeId: fee._id,
-                        feeNumber: fee.feeNumber,
-                        student: fee.student,
-                        date: payment.date,
-                        amount: payment.amount,
-                        method: payment.method,
-                        reference: payment.reference,
-                        discount: payment.discount,
-                        cashReceived: payment.amount,
-                        description: `Payment for Fee #${fee.feeNumber}`
-                    });
-                }
-            });
-        });
-
-        // Also include FeePayment model (voucher-based collections)
         const fpQuery = { company: new mongoose.Types.ObjectId(companyId), status: 'active' };
         if (studentId) fpQuery.student = new mongoose.Types.ObjectId(studentId);
         if (start && end) fpQuery.paymentDate = { $gte: start, $lte: end };
@@ -1141,40 +1097,41 @@ const getPaymentsReport = async (req, res) => {
             });
         });
 
-        // Also fetch generic payments from Ledger
-        const genericQuery = {
-            company: new mongoose.Types.ObjectId(companyId),
-            type: 'payment',
-            referenceType: 'payment' // generic payments have referenceType 'payment' and referenceId as studentId
-        };
-        
-        if (studentId) {
-            genericQuery.student = new mongoose.Types.ObjectId(studentId);
-        }
+        const query = { company: new mongoose.Types.ObjectId(companyId) };
+        if (studentId) query.student = new mongoose.Types.ObjectId(studentId);
+        if (start && end) query["payments.date"] = { $gte: start, $lte: end };
 
-        if (startDate && endDate) {
-            genericQuery.date = { $gte: start, $lte: end };
-        }
-
-        const genericLedgerEntries = await Ledger.find(genericQuery)
+        const fees = await Fee.find(query)
             .populate('student', 'name email contact')
             .lean();
 
-        genericLedgerEntries.forEach(entry => {
-            allPayments.push({
-                _id: entry._id,
-                feeId: null,
-                feeNumber: 'Generic',
-                student: entry.student,
-                date: entry.date,
-                amount: entry.debit > 0 ? entry.debit : entry.credit, // In generic payment, Cash Dr (debit)
-                method: entry.description.includes('Cash') ? 'Cash' : 'Other',
-                reference: entry.reference,
-                discount: 0, // Ledger entries don't easily split discount unless we aggregate
-                cashReceived: entry.debit > 0 ? entry.debit : entry.credit,
-                description: entry.description
+        const feePaymentFeeIds = new Set(feePayments.map(fp => fp.fee?.toString()).filter(Boolean));
+        const feePaymentVoucherIds = new Set(feePayments.map(fp => fp.voucher?._id?.toString() || fp.voucher?.toString()).filter(Boolean));
+
+        for (const fee of fees) {
+            if (feePaymentFeeIds.has(fee._id.toString())) continue;
+            const linkedVoucher = fee.voucher?.toString?.() || '';
+            if (linkedVoucher && feePaymentVoucherIds.has(linkedVoucher)) continue;
+
+            (fee.payments || []).forEach(payment => {
+                const payDate = new Date(payment.date);
+                if ((!start || payDate >= start) && (!end || payDate <= end)) {
+                    allPayments.push({
+                        _id: payment._id,
+                        feeId: fee._id,
+                        feeNumber: fee.feeNumber,
+                        student: fee.student,
+                        date: payment.date,
+                        amount: payment.amount,
+                        method: payment.method,
+                        reference: payment.reference,
+                        discount: payment.discount,
+                        cashReceived: payment.amount,
+                        description: `Payment for Fee #${fee.feeNumber}`
+                    });
+                }
             });
-        });
+        }
 
         allPayments.sort((a, b) => new Date(b.date) - new Date(a.date));
 
