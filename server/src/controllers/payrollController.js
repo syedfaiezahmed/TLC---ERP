@@ -8,6 +8,7 @@ import mongoose from 'mongoose';
 import Payroll from '../models/Payroll.js';
 import Teacher from '../models/Teacher.js';
 import Attendance from '../models/Attendance.js';
+import TeacherClassLog from '../models/TeacherClassLog.js';
 import Fee from '../models/Fee.js';
 import FeeVoucher from '../models/FeeVoucher.js';
 import Company from '../models/Company.js';
@@ -34,54 +35,13 @@ const monthBounds = (monthStr) => {
   return { start, end };
 };
 
-/**
- * Count distinct class sessions for a teacher in a month.
- * Strategy: group attendance records by (date-string, course) → each group = 1 class session.
- * Uses classHeld:true or any status != 'Absent' to confirm class happened.
- */
-const countClassSessions = async (companyId, teacherId, start, end) => {
-  const sessions = await Attendance.aggregate([
-    {
-      $match: {
-        company: new mongoose.Types.ObjectId(companyId),
-        teacher: new mongoose.Types.ObjectId(teacherId),
-        date: { $gte: start, $lte: end },
-        classHeld: { $ne: false },
-      },
-    },
-    {
-      $group: {
-        _id: {
-          dateStr: { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
-          course: '$course',
-        },
-        course: { $first: '$course' },
-        courseName: { $first: '$courseName' },
-      },
-    },
-    {
-      $group: {
-        _id: '$_id.course',
-        course: { $first: '$course' },
-        classCount: { $sum: 1 },
-      },
-    },
-  ]);
-  return sessions; // [{ course: ObjectId, classCount: Number }]
-};
-
-/**
- * Build attendance array compatible with calculatePerClassEarnings
- * Each entry = one unique class session (course, date).
- */
 const buildAttendanceForCalc = async (companyId, teacherId, start, end) => {
-  const sessions = await Attendance.aggregate([
+  const sessions = await TeacherClassLog.aggregate([
     {
       $match: {
         company: new mongoose.Types.ObjectId(companyId),
         teacher: new mongoose.Types.ObjectId(teacherId),
         date: { $gte: start, $lte: end },
-        classHeld: { $ne: false },
       },
     },
     {
@@ -91,12 +51,41 @@ const buildAttendanceForCalc = async (companyId, teacherId, start, end) => {
       $lookup: { from: 'batches', localField: 'batch', foreignField: '_id', as: 'batchDoc' },
     },
     {
+      $lookup: {
+        from: 'attendances',
+        let: { logCompany: '$company', logTeacher: '$teacher', logDate: '$date' },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ['$company', '$$logCompany'] },
+                  { $eq: ['$teacher', '$$logTeacher'] },
+                  { $eq: ['$type', 'Teacher'] },
+                  { $in: ['$status', ['Present', 'Late']] },
+                  {
+                    $eq: [
+                      { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
+                      { $dateToString: { format: '%Y-%m-%d', date: '$$logDate' } },
+                    ],
+                  },
+                ],
+              },
+            },
+          },
+        ],
+        as: 'teacherAttendance',
+      },
+    },
+    { $match: { 'teacherAttendance.0': { $exists: true } } },
+    {
       $group: {
         _id: {
           dateStr: { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
           course: '$course',
           batch: '$batch',
         },
+        date: { $first: '$date' },
         course: { $first: '$course' },
         batch: { $first: '$batch' },
         courseName: { $first: { $arrayElemAt: ['$courseDoc.name', 0] } },
@@ -108,6 +97,7 @@ const buildAttendanceForCalc = async (companyId, teacherId, start, end) => {
   // Each element = one class held (unique date+course+batch combo)
   return sessions.map((s) => ({
     classHeld: true,
+    date:       s.date,
     course:     s.course,
     batch:      s.batch  || null,
     courseName: s.courseName || 'Unknown Course',
@@ -614,21 +604,29 @@ const getPayrollPrintData = async (req, res) => {
 
     // ─── Per-Class: day-by-day class sessions ────────────────────────────────
     if (payroll.salaryType === 'per_class' || payroll.salaryType === 'hybrid') {
-      const records = await Attendance.find({
+      const records = await TeacherClassLog.find({
         company: companyId,
         teacher: teacher._id,
-        type: 'Teacher',
         date: { $gte: start, $lte: end },
-        classHeld: { $ne: false },
       })
         .populate('course', 'name')
         .populate('batch', 'name')
         .sort({ date: 1 })
         .lean();
 
+      const teacherAttendanceRecords = await Attendance.find({
+        company: companyId,
+        teacher: teacher._id,
+        type: 'Teacher',
+        status: { $in: ['Present', 'Late'] },
+        date: { $gte: start, $lte: end },
+      }).select('date').lean();
+      const validClassDates = new Set(teacherAttendanceRecords.map(r => r.date.toISOString().slice(0, 10)));
+
       const sessionMap = {};
       records.forEach(rec => {
         const dateStr = rec.date.toISOString().slice(0, 10);
+        if (!validClassDates.has(dateStr)) return;
         const courseId = rec.course?._id?.toString() || '';
         const batchId = rec.batch?._id?.toString() || '';
         const key = `${dateStr}::${courseId}::${batchId}`;

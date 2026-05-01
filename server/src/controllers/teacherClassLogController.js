@@ -276,7 +276,7 @@ const generatePayrollFromLogs = async (req, res) => {
       const existing = await Payroll.findOne({ company: companyId, teacher: row._id, month: monthDate });
       if (existing) {
         if (existing.status === 'paid') continue; // Never overwrite paid payrolls
-        Object.assign(existing, payload);
+        existing.set(payload);
         await existing.save();
         updated++;
       } else {

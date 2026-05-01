@@ -1,4 +1,5 @@
 import Attendance from '../models/Attendance.js';
+import TeacherClassLog from '../models/TeacherClassLog.js';
 import mongoose from 'mongoose';
 import { logAudit } from '../services/auditService.js';
 
@@ -72,6 +73,22 @@ const markAttendanceBulk = async (req, res) => {
     });
 
     await Attendance.bulkWrite(ops);
+
+    if (type === 'Teacher') {
+      const teachersToClear = records
+        .filter(record => !['Present', 'Late'].includes(record.status))
+        .map(record => record.teacher)
+        .filter(Boolean);
+
+      if (teachersToClear.length > 0) {
+        await TeacherClassLog.deleteMany({
+          company: companyId,
+          teacher: { $in: teachersToClear },
+          date: dayRange(date),
+        });
+      }
+    }
+
     try { await logAudit({ req, companyId, action: 'mark_attendance', entityType: 'attendance', entityId: companyId, before: null, after: { date, type, batch, count: records.length } }); } catch (_) {}
 
     return res.status(201).json({ message: 'Attendance saved successfully', count: records.length });
@@ -90,6 +107,13 @@ const deleteAttendance = async (req, res) => {
 
     const before = record.toObject();
     await record.deleteOne();
+    if (record.type === 'Teacher') {
+      await TeacherClassLog.deleteMany({
+        company: req.user.company,
+        teacher: record.teacher,
+        date: dayRange(record.date),
+      });
+    }
     try { await logAudit({ req, companyId: req.user.company, action: 'delete', entityType: 'attendance', entityId: req.params.id, before, after: null }); } catch (_) {}
 
     return res.json({ message: 'Attendance record deleted' });
