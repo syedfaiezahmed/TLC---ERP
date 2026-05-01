@@ -14,6 +14,37 @@ const dayRange = (dateStr) => {
   return { $gte: s, $lte: e };
 };
 
+const onlyPresentLateTeacherAttendanceLookup = [
+  {
+    $lookup: {
+      from: 'attendances',
+      let: { logCompany: '$company', logTeacher: '$teacher', logDate: '$date' },
+      pipeline: [
+        {
+          $match: {
+            $expr: {
+              $and: [
+                { $eq: ['$company', '$$logCompany'] },
+                { $eq: ['$teacher', '$$logTeacher'] },
+                { $eq: ['$type', 'Teacher'] },
+                { $in: ['$status', ['Present', 'Late']] },
+                {
+                  $eq: [
+                    { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
+                    { $dateToString: { format: '%Y-%m-%d', date: '$$logDate' } },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      ],
+      as: 'teacherAttendance',
+    },
+  },
+  { $match: { 'teacherAttendance.0': { $exists: true } } },
+];
+
 // @desc  Get present per-class teachers + their batches + existing logs for a date
 // @route GET /api/class-logs/company/:companyId?date=YYYY-MM-DD
 const getClassLogs = async (req, res) => {
@@ -182,6 +213,7 @@ const getMonthlySummary = async (req, res) => {
 
     const summary = await TeacherClassLog.aggregate([
       { $match: { company: new mongoose.Types.ObjectId(companyId), date: { $gte: start, $lte: end } } },
+      ...onlyPresentLateTeacherAttendanceLookup,
       {
         $group: {
           _id: { teacher: '$teacher', course: '$course' },
@@ -244,6 +276,7 @@ const generatePayrollFromLogs = async (req, res) => {
 
     const summary = await TeacherClassLog.aggregate([
       { $match: { company: new mongoose.Types.ObjectId(companyId), date: { $gte: start, $lte: end } } },
+      ...onlyPresentLateTeacherAttendanceLookup,
       { $group: { _id: { teacher: '$teacher', course: '$course' }, classCount: { $sum: 1 }, ratePerClass: { $first: '$ratePerClass' }, amount: { $sum: '$ratePerClass' } } },
       { $lookup: { from: 'courses', localField: '_id.course', foreignField: '_id', as: 'courseInfo' } },
       { $unwind: { path: '$courseInfo', preserveNullAndEmptyArrays: true } },
