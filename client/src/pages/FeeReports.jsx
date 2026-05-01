@@ -16,6 +16,7 @@ import { getCourses } from '../redux/courseSlice';
 import { getBatches } from '../redux/batchSlice';
 import { exportToExcel, exportToPDF } from '../utils/exportUtils';
 import { useRealTimeReports } from '../hooks/useRealTimeReports';
+import WhatsAppContact from '../components/WhatsAppContact';
 import {
   Container,
   Typography,
@@ -898,7 +899,7 @@ const Reports = () => {
                         </Grid>
                         <Grid item xs={12} sm={6} md={3}>
                           <Typography variant="body2" color="text.secondary">Contact</Typography>
-                          <Typography variant="body1" fontWeight="bold">{studentLedgerReport.student.contact}</Typography>
+                          <WhatsAppContact value={studentLedgerReport.student.contact} variant="body1" fontWeight="bold" />
                         </Grid>
                         <Grid item xs={12} sm={6} md={3}>
                           <Typography variant="body2" color="text.secondary">Email</Typography>

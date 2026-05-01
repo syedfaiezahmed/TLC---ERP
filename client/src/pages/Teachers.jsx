@@ -11,6 +11,7 @@ import {
   Chip, MenuItem, Select, FormControl, InputLabel, Divider, Tooltip, Grid,
 } from '@mui/material';
 import { TableRowSkeleton } from '../components/SkeletonLoaders';
+import WhatsAppContact from '../components/WhatsAppContact';
 import {
   Add as AddIcon, Search as SearchIcon, Edit as EditIcon,
   Delete as DeleteIcon, School as SchoolIcon, Warning as WarningIcon,
@@ -210,7 +211,7 @@ const Teachers = () => {
                         </Box>
                       </Box>
                     </TableCell>
-                    <TableCell><Typography variant="body2">{t.contact}</Typography></TableCell>
+                    <TableCell><WhatsAppContact value={t.contact} /></TableCell>
                     <TableCell><Typography variant="body2">{t.specialization || '—'}</Typography></TableCell>
                     <TableCell>
                       <Chip size="small" label={SALARY_TYPES.find(s => s.value === t.salaryType)?.label || t.salaryType}

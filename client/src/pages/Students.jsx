@@ -4,6 +4,7 @@ import { useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { getStudents, createStudent, updateStudent, deleteStudent } from '../redux/studentSlice';
 import { TableRowSkeleton } from '../components/SkeletonLoaders';
+import WhatsAppContact from '../components/WhatsAppContact';
 import { getGroups } from '../redux/groupSlice';
 import * as api from '../services/api';
 import {
@@ -48,7 +49,6 @@ import {
   Delete as DeleteIcon,
   Person as PersonIcon,
   Email as EmailIcon,
-  Phone as PhoneIcon,
   LocationOn as LocationOnIcon,
   Business as BusinessIcon,
   FilterList as FilterListIcon,
@@ -432,12 +432,7 @@ const Students = () => {
                           <Typography variant="caption" color="text.primary">{student.email}</Typography>
                         </Box>
                       )}
-                      {student.contact && (
-                        <Box display="flex" alignItems="center" gap={1}>
-                          <PhoneIcon fontSize="small" sx={{ color: 'text.secondary', fontSize: 14 }} />
-                          <Typography variant="caption" color="text.primary">{student.contact}</Typography>
-                        </Box>
-                      )}
+                      {student.contact && <WhatsAppContact value={student.contact} variant="caption" />}
                     </Box>
                   </TableCell>
                   <TableCell sx={{ py: 0.5, display: { xs: 'none', md: 'table-cell' } }}>

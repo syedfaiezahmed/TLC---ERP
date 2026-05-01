@@ -22,6 +22,7 @@ import moment from 'moment';
 import { toast } from 'react-toastify';
 import { fetchPayrollPrintData } from '../services/api';
 import StatCard from '../components/StatCard';
+import WhatsAppContact from '../components/WhatsAppContact';
 
 // ─── Payslip HTML Generator ───────────────────────────────────────────────────
 const generatePayslipHTML = (payroll, companyName, printData = null) => {
@@ -530,7 +531,7 @@ const Payroll = () => {
                     <TableRow key={p._id} hover>
                       <TableCell>
                         <Typography fontWeight={700} variant="body2">{p.teacher?.name || '—'}</Typography>
-                        <Typography variant="caption" color="text.secondary">{p.teacher?.contact || ''}</Typography>
+                        <WhatsAppContact value={p.teacher?.contact} variant="caption" color="text.secondary" />
                       </TableCell>
                       <TableCell><SalaryTypeChip type={p.salaryType} /></TableCell>
                       <TableCell>

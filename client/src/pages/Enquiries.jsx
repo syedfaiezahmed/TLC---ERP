@@ -36,8 +36,8 @@ import {
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
-import PhoneIcon from '@mui/icons-material/Phone';
 import moment from 'moment';
+import WhatsAppContact from '../components/WhatsAppContact';
 
 const Enquiries = () => {
   const [formData, setFormData] = useState({ 
@@ -180,7 +180,7 @@ const Enquiries = () => {
               {filteredEnquiries.map((enquiry) => (
                 <TableRow key={enquiry._id} hover>
                   <TableCell fontWeight={600}>{enquiry.name}</TableCell>
-                  <TableCell>{enquiry.contact}</TableCell>
+                  <TableCell><WhatsAppContact value={enquiry.contact} /></TableCell>
                   <TableCell>{enquiry.courseOfInterest?.name || 'N/A'}</TableCell>
                   <TableCell>{enquiry.source}</TableCell>
                   <TableCell>

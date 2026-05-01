@@ -4,6 +4,7 @@ import { useParams } from 'react-router-dom';
 import { getPaymentsReport } from '../redux/reportSlice';
 import { recordPayment, recordGenericPayment } from '../redux/feeSlice'; 
 import { fetchFees, deletePayment, getPaymentDetails } from '../services/api';
+import WhatsAppContact from '../components/WhatsAppContact';
 import {
   Container,
   Typography,
@@ -411,7 +412,7 @@ const Payments = () => {
                           <TableCell>{moment(payment.date).format('DD MMM YYYY')}</TableCell>
                           <TableCell>
                               <Typography variant="body2" fontWeight={600}>{payment.student?.name || 'Unknown'}</Typography>
-                              <Typography variant="caption" color="text.secondary">{payment.student?.phone}</Typography>
+                              <WhatsAppContact value={payment.student?.phone || payment.student?.contact} variant="caption" color="text.secondary" />
                           </TableCell>
                           <TableCell>
                               <Typography variant="body2">{payment.description}</Typography>

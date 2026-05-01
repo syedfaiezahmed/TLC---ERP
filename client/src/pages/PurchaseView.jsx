@@ -23,6 +23,7 @@ import { toast } from 'react-toastify';
 import { deletePurchase, fetchPurchase } from '../services/api';
 import PageHeader from '../components/ui/PageHeader';
 import SectionCard from '../components/ui/SectionCard';
+import WhatsAppContact from '../components/WhatsAppContact';
 
 const PurchaseView = () => {
   const { companyId, id } = useParams();
@@ -118,9 +119,11 @@ const PurchaseView = () => {
                 </Typography>
                 <Divider sx={{ my: 2 }} />
                 <Typography fontWeight={700}>{purchase.supplier?.name}</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {purchase.supplier?.contact || purchase.supplier?.email || '-'}
-                </Typography>
+                {purchase.supplier?.contact ? (
+                  <WhatsAppContact value={purchase.supplier.contact} color="text.secondary" />
+                ) : (
+                  <Typography variant="body2" color="text.secondary">{purchase.supplier?.email || '-'}</Typography>
+                )}
                 <Divider sx={{ my: 2 }} />
                 <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                   <Typography color="text.secondary">Total</Typography>
