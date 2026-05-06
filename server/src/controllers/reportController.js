@@ -27,29 +27,54 @@ const getRevenueReport = async (req, res) => {
     try {
         const { companyId } = req.params;
         const { startDate, endDate } = req.query;
+        const companyObjId = new mongoose.Types.ObjectId(companyId);
 
-        const query = { 
-            company: new mongoose.Types.ObjectId(companyId),
-            accountName: 'Fee Revenue'
-        };
-
+        let dateFilter = {};
         if (startDate && endDate) {
             const start = new Date(startDate);
             start.setHours(0, 0, 0, 0);
             const end = new Date(endDate);
             end.setHours(23, 59, 59, 999);
-            query.date = { $gte: start, $lte: end };
+            dateFilter = { $gte: start, $lte: end };
         }
 
-        const revenueEntries = await Ledger.find(query)
-            .populate('student', 'name')
-            .sort({ date: -1 })
-            .lean();
+        // Ledger entries kept for detail/audit trail display
+        const ledgerQuery = { company: companyObjId, accountName: 'Fee Revenue' };
+        if (dateFilter.$gte) ledgerQuery.date = dateFilter;
 
-        const totalRevenue = revenueEntries.reduce((acc, item) => acc + (item.credit - item.debit), 0);
+        // CANONICAL totals: FeeVoucher (billed) + FeePayment (cash + discount + late fee)
+        const voucherQuery = { company: companyObjId, status: { $ne: 'cancelled' } };
+        const paymentQuery = { company: companyObjId, status: 'active' };
+        if (dateFilter.$gte) {
+            voucherQuery.generatedDate = dateFilter;
+            paymentQuery.paymentDate = dateFilter;
+        }
+
+        const [revenueEntries, voucherAgg, paymentAgg] = await Promise.all([
+            Ledger.find(ledgerQuery).populate('student', 'name').sort({ date: -1 }).lean(),
+            FeeVoucher.aggregate([
+                { $match: voucherQuery },
+                { $group: { _id: null, totalFee: { $sum: { $ifNull: ['$totalFee', 0] } } } }
+            ]),
+            FeePayment.aggregate([
+                { $match: paymentQuery },
+                { $group: { _id: null, totalCash: { $sum: { $ifNull: ['$amount', 0] } }, totalDiscount: { $sum: { $ifNull: ['$discountAmount', 0] } }, totalLateFee: { $sum: { $ifNull: ['$lateFeeAmount', 0] } } } }
+            ])
+        ]);
+
+        // Canonical totals override stale Ledger sum
+        const totalRevenue = voucherAgg[0]?.totalFee || 0;
+        const totalCashCollected = paymentAgg[0]?.totalCash || 0;
+        const totalDiscount = paymentAgg[0]?.totalDiscount || 0;
+        const totalLateFee = paymentAgg[0]?.totalLateFee || 0;
+        const totalOutstanding = Math.max(0, totalRevenue - totalCashCollected - totalDiscount);
 
         res.json({
             totalRevenue: Number(totalRevenue.toFixed(2)),
+            totalCashCollected: Number(totalCashCollected.toFixed(2)),
+            totalDiscount: Number(totalDiscount.toFixed(2)),
+            totalLateFee: Number(totalLateFee.toFixed(2)),
+            totalOutstanding: Number(totalOutstanding.toFixed(2)),
             count: revenueEntries.length,
             data: revenueEntries
         });
@@ -522,6 +547,58 @@ const getProfitAndLoss = async (req, res) => {
             }}
         ]);
 
+        const dateRange = {};
+        if (startDate && endDate) {
+            const start = new Date(startDate);
+            start.setHours(0, 0, 0, 0);
+            const end = new Date(endDate);
+            end.setHours(23, 59, 59, 999);
+            dateRange.start = start;
+            dateRange.end = end;
+        }
+
+        const voucherQuery = {
+            company: new mongoose.Types.ObjectId(companyId),
+            status: { $ne: 'cancelled' }
+        };
+        if (dateRange.start && dateRange.end) {
+            voucherQuery.generatedDate = { $gte: dateRange.start, $lte: dateRange.end };
+        }
+
+        const paymentQuery = {
+            company: new mongoose.Types.ObjectId(companyId),
+            status: 'active'
+        };
+        if (dateRange.start && dateRange.end) {
+            paymentQuery.paymentDate = { $gte: dateRange.start, $lte: dateRange.end };
+        }
+
+        const [voucherRevenueAgg, paymentExpenseAgg] = await Promise.all([
+            FeeVoucher.aggregate([
+                { $match: voucherQuery },
+                {
+                    $group: {
+                        _id: null,
+                        feeRevenue: { $sum: { $ifNull: ['$totalFee', 0] } }
+                    }
+                }
+            ]),
+            FeePayment.aggregate([
+                { $match: paymentQuery },
+                {
+                    $group: {
+                        _id: null,
+                        scholarshipDiscount: { $sum: { $ifNull: ['$discountAmount', 0] } },
+                        lateFeeRevenue: { $sum: { $ifNull: ['$lateFeeAmount', 0] } }
+                    }
+                }
+            ])
+        ]);
+
+        const canonicalFeeRevenue = voucherRevenueAgg[0]?.feeRevenue || 0;
+        const canonicalScholarshipDiscount = paymentExpenseAgg[0]?.scholarshipDiscount || 0;
+        const canonicalLateFeeRevenue = paymentExpenseAgg[0]?.lateFeeRevenue || 0;
+
         let operatingExpenses = [];
         let totalOperatingExpenses = 0;
         let otherIncome = [];
@@ -532,13 +609,28 @@ const getProfitAndLoss = async (req, res) => {
             const expenseBalance = account.debit - account.credit;
 
             if (account.type === 'revenue') {
+                if (['Fee Revenue', 'Late Fee Revenue'].includes(account._id)) return;
                 otherIncome.push({ name: account._id, amount: revenueBalance });
                 totalOtherIncome += revenueBalance;
             } else if (account.type === 'expense') {
+                if (account._id === 'Scholarship/Discount') return;
                 operatingExpenses.push({ name: account._id, amount: expenseBalance });
                 totalOperatingExpenses += expenseBalance;
             }
         });
+
+        if (canonicalFeeRevenue > 0) {
+            otherIncome.push({ name: 'Fee Revenue', amount: canonicalFeeRevenue });
+            totalOtherIncome += canonicalFeeRevenue;
+        }
+        if (canonicalLateFeeRevenue > 0) {
+            otherIncome.push({ name: 'Late Fee Revenue', amount: canonicalLateFeeRevenue });
+            totalOtherIncome += canonicalLateFeeRevenue;
+        }
+        if (canonicalScholarshipDiscount > 0) {
+            operatingExpenses.push({ name: 'Scholarship/Discount', amount: canonicalScholarshipDiscount });
+            totalOperatingExpenses += canonicalScholarshipDiscount;
+        }
 
         // Sort income: Fee Revenue first, then others alphabetically
         otherIncome.sort((a, b) => {
@@ -681,28 +773,27 @@ const getDashboardSummary = async (req, res) => {
         const companyObjectId = new mongoose.Types.ObjectId(companyId);
 
         const [
-            revenueResult,
             expenseResult,
             receivablesResult,
             bankResult,
             cashResult,
             payablesResult,
             payrollResult,
-            otherIncomeResult,
+            otherLedgerRevenueResult,
+            canonicalVoucherResult,
+            canonicalPaymentResult,
             totalStudents,
             totalCourses,
             totalEnquiries,
             totalBatches,
             totalExams
         ] = await Promise.all([
-            Ledger.aggregate([
-                { $match: { company: companyObjectId, accountType: 'revenue' }},
-                { $group: { _id: null, total: { $sum: { $subtract: ["$credit", "$debit"] } } } }
-            ]),
+            // Expenses: Ledger is the source of truth (payroll, purchases, etc. are posted correctly)
             Ledger.aggregate([
                  { $match: { company: companyObjectId, accountType: 'expense' }},
                  { $group: { _id: null, total: { $sum: { $subtract: ["$debit", "$credit"] } } } }
             ]),
+            // Asset / liability balances — correctly maintained in Ledger
             Ledger.aggregate([
                 { $match: { company: companyObjectId, accountName: 'Accounts Receivable' }},
                 { $group: { _id: null, total: { $sum: { $subtract: ["$debit", "$credit"] } } } }
@@ -723,9 +814,21 @@ const getDashboardSummary = async (req, res) => {
                 { $match: { company: companyObjectId, accountName: { $in: ['Salary Expense', 'Salary Payable', 'Payroll Expense'] } }},
                 { $group: { _id: null, total: { $sum: { $subtract: ["$debit", "$credit"] } } } }
             ]),
+            // Non-fee revenue from Ledger (e.g. interest income, other income entries)
+            // Exclude Fee Revenue and Late Fee Revenue — these come from canonical sources below
             Ledger.aggregate([
-                { $match: { company: companyObjectId, accountName: 'Fee Revenue' }},
+                { $match: { company: companyObjectId, accountType: 'revenue', accountName: { $nin: ['Fee Revenue', 'Late Fee Revenue'] } }},
                 { $group: { _id: null, total: { $sum: { $subtract: ["$credit", "$debit"] } } } }
+            ]),
+            // CANONICAL: FeeVoucher is the single source of truth for billed fee revenue
+            FeeVoucher.aggregate([
+                { $match: { company: companyObjectId, status: { $ne: 'cancelled' } } },
+                { $group: { _id: null, totalFee: { $sum: { $ifNull: ['$totalFee', 0] } } } }
+            ]),
+            // CANONICAL: FeePayment is the single source of truth for cash collected & discounts
+            FeePayment.aggregate([
+                { $match: { company: companyObjectId, status: 'active' } },
+                { $group: { _id: null, totalCash: { $sum: { $ifNull: ['$amount', 0] } }, totalDiscount: { $sum: { $ifNull: ['$discountAmount', 0] } }, totalLateFee: { $sum: { $ifNull: ['$lateFeeAmount', 0] } } } }
             ]),
             Student.countDocuments({ company: companyObjectId }),
             Course.countDocuments({ company: companyObjectId }),
@@ -734,22 +837,28 @@ const getDashboardSummary = async (req, res) => {
             Exam.countDocuments({ company: companyObjectId, status: 'Scheduled' })
         ]);
 
-        const netRevenue = revenueResult.length > 0 ? revenueResult[0].total : 0;
+        // Canonical fee revenue = FeeVoucher.totalFee (accrual: what was billed)
+        const feeRevenue = canonicalVoucherResult[0]?.totalFee || 0;
+        const canonicalLateFeeRevenue = canonicalPaymentResult[0]?.totalLateFee || 0;
+        // Other income from Ledger (non-fee sources, correctly tracked there)
+        const otherLedgerRevenue = otherLedgerRevenueResult[0]?.total || 0;
+        // Total Revenue = canonical fee + late fee + any other non-fee ledger income
+        const netRevenue = feeRevenue + canonicalLateFeeRevenue + otherLedgerRevenue;
+        const totalOtherIncome = otherLedgerRevenue;
+
         const totalExpenses = expenseResult.length > 0 ? expenseResult[0].total : 0;
         const totalReceivables = receivablesResult.length > 0 ? receivablesResult[0].total : 0;
         const totalPayables = payablesResult.length > 0 ? payablesResult[0].total : 0;
         const bankBalance = bankResult.length > 0 ? bankResult[0].total : 0;
         const cashBalance = cashResult.length > 0 ? cashResult[0].total : 0;
         const totalPayroll = payrollResult.length > 0 ? Math.max(0, payrollResult[0].total) : 0;
-        const feeRevenue = otherIncomeResult.length > 0 ? Math.max(0, otherIncomeResult[0].total) : 0;
-        const totalOtherIncome = Math.max(0, netRevenue - feeRevenue);
 
         const netIncome = netRevenue - totalExpenses;
 
         res.json({
             totalRevenue: Number(netRevenue.toFixed(2)),
-            totalReceivables: Number((totalReceivables < 0 ? 0 : totalReceivables).toFixed(2)),
-            totalPayables: Number((totalPayables < 0 ? 0 : totalPayables).toFixed(2)),
+            totalReceivables: Number(Math.max(0, totalReceivables).toFixed(2)),
+            totalPayables: Number(Math.max(0, totalPayables).toFixed(2)),
             netIncome: Number(netIncome.toFixed(2)),
             bankBalance: Number(bankBalance.toFixed(2)),
             cashBalance: Number(cashBalance.toFixed(2)),
@@ -1389,6 +1498,76 @@ const purgeDoubleFeeRevenueEntries = async (req, res) => {
     }
 };
 
+// @desc    Cross-validate all fee totals across every data source
+// @route   GET /api/reports/validate/:companyId
+// @access  Private/Admin
+// Returns OK if all sources agree; lists every mismatch if not.
+const getFinancialValidation = async (req, res) => {
+    try {
+        const { companyId } = req.params;
+        const C = new mongoose.Types.ObjectId(companyId);
+
+        const [feeAgg, fpAgg, fvAgg, ledgerFeeRev, ledgerCashBank] = await Promise.all([
+            Fee.aggregate([{ $match: { company: C, status: { $ne: 'cancelled' } } }, { $group: { _id: null, totalInvoiced: { $sum: '$totalAmount' }, totalPaid: { $sum: '$paidAmount' }, totalDue: { $sum: '$balanceDue' } } }]),
+            FeePayment.aggregate([{ $match: { company: C, status: 'active' } }, { $group: { _id: null, totalCash: { $sum: '$amount' }, totalDiscount: { $sum: '$discountAmount' }, count: { $sum: 1 } } }]),
+            FeeVoucher.aggregate([{ $match: { company: C, status: { $ne: 'cancelled' } } }, { $group: { _id: null, totalFee: { $sum: '$totalFee' }, totalPaid: { $sum: '$paidAmount' } } }]),
+            Ledger.aggregate([{ $match: { company: C, accountName: 'Fee Revenue' } }, { $group: { _id: null, net: { $sum: { $subtract: ['$credit', '$debit'] } } } }]),
+            Ledger.aggregate([{ $match: { company: C, accountName: { $in: ['Cash', 'Bank'] }, accountType: 'asset' } }, { $group: { _id: null, net: { $sum: { $subtract: ['$debit', '$credit'] } } } }]),
+        ]);
+
+        const sources = {
+            fee_totalInvoiced:   feeAgg[0]?.totalInvoiced  || 0,
+            fee_totalPaid:       feeAgg[0]?.totalPaid       || 0,
+            fee_totalDue:        feeAgg[0]?.totalDue        || 0,
+            feePayment_cash:     fpAgg[0]?.totalCash        || 0,
+            feePayment_discount: fpAgg[0]?.totalDiscount    || 0,
+            feePayment_count:    fpAgg[0]?.count            || 0,
+            voucher_totalFee:    fvAgg[0]?.totalFee         || 0,
+            voucher_paidAmount:  fvAgg[0]?.totalPaid        || 0,
+            ledger_feeRevenue:   ledgerFeeRev[0]?.net       || 0,
+            ledger_cashBank:     ledgerCashBank[0]?.net     || 0,
+        };
+
+        const mismatches = [];
+        const tol = 0.01;
+
+        // Fee model vs FeeVoucher — both represent billed amounts
+        if (Math.abs(sources.fee_totalInvoiced - sources.voucher_totalFee) > tol) {
+            mismatches.push({ check: 'Fee.totalAmount vs FeeVoucher.totalFee', a: sources.fee_totalInvoiced, b: sources.voucher_totalFee, diff: sources.fee_totalInvoiced - sources.voucher_totalFee });
+        }
+        // Fee.paidAmount vs FeePayment.amount — both should equal cash collected
+        if (Math.abs(sources.fee_totalPaid - sources.feePayment_cash) > tol) {
+            mismatches.push({ check: 'Fee.paidAmount vs FeePayment.amount', a: sources.fee_totalPaid, b: sources.feePayment_cash, diff: sources.fee_totalPaid - sources.feePayment_cash });
+        }
+        // FeeVoucher.paidAmount vs FeePayment.amount
+        if (Math.abs(sources.voucher_paidAmount - sources.feePayment_cash) > tol) {
+            mismatches.push({ check: 'FeeVoucher.paidAmount vs FeePayment.amount', a: sources.voucher_paidAmount, b: sources.feePayment_cash, diff: sources.voucher_paidAmount - sources.feePayment_cash });
+        }
+        // Ledger Cash+Bank vs FeePayment.amount — cash in bank must equal cash received
+        if (Math.abs(sources.ledger_cashBank - sources.feePayment_cash) > tol) {
+            mismatches.push({ check: 'Ledger Cash+Bank vs FeePayment.amount', a: sources.ledger_cashBank, b: sources.feePayment_cash, diff: sources.ledger_cashBank - sources.feePayment_cash });
+        }
+        // Ledger Fee Revenue vs FeeVoucher.totalFee — ledger should match billing
+        if (Math.abs(sources.ledger_feeRevenue - sources.voucher_totalFee) > tol) {
+            mismatches.push({ check: 'Ledger Fee Revenue vs FeeVoucher.totalFee (INCOMPLETE LEDGER)', a: sources.ledger_feeRevenue, b: sources.voucher_totalFee, diff: sources.ledger_feeRevenue - sources.voucher_totalFee, note: 'Ledger accrual entries are incomplete. P&L and Dashboard now use FeeVoucher as canonical source.' });
+        }
+
+        res.json({
+            status: mismatches.length === 0 ? 'OK' : 'MISMATCH_DETECTED',
+            sources,
+            mismatches,
+            canonical: {
+                feeBilled:    sources.voucher_totalFee,
+                cashCollected: sources.feePayment_cash,
+                discountGiven: sources.feePayment_discount,
+                outstanding:  Math.max(0, sources.voucher_totalFee - sources.feePayment_cash - sources.feePayment_discount),
+            },
+        });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 export {
     getRevenueReport,
     getReceivablesReport,
@@ -1407,4 +1586,5 @@ export {
     getPaymentsReport,
     getCashFlowStatement,
     purgeDoubleFeeRevenueEntries,
+    getFinancialValidation,
 };
