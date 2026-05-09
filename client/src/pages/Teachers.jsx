@@ -8,7 +8,7 @@ import {
   Box, Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   TextField, Typography, IconButton, Dialog, DialogTitle, DialogContent, DialogActions,
   InputAdornment, Avatar, Card, useTheme, alpha, CircularProgress,
-  Chip, MenuItem, Select, FormControl, InputLabel, Divider, Tooltip, Grid,
+  Chip, MenuItem, Select, FormControl, InputLabel, Divider, Tooltip, Grid, Stack,
 } from '@mui/material';
 import { TableRowSkeleton } from '../components/SkeletonLoaders';
 import WhatsAppContact from '../components/WhatsAppContact';
@@ -36,6 +36,9 @@ const emptyForm = () => ({
   commissionRates: [],
   bankDetails: { accountName: '', accountNumber: '', bankName: '' },
 });
+
+const subjectsToString = (arr) => (arr || []).join(', ');
+const stringToSubjects = (str) => str.split(',').map(s => s.trim()).filter(Boolean);
 
 const Teachers = () => {
   const theme = useTheme();
@@ -86,7 +89,7 @@ const Teachers = () => {
           const bId = r.batch?._id || r.batch || '';
           const match = rates.find(pr => String(pr.course?._id || pr.course) === String(cId) && String(pr.batch?._id || pr.batch || '') === String(bId))
             || rates.find(pr => String(pr.course?._id || pr.course) === String(cId) && !pr.batch);
-          return { course: cId, batch: bId, ratePerClass: r.ratePerClass || match?.ratePerClass || 0 };
+          return { course: cId, batch: bId, ratePerClass: r.ratePerClass || match?.ratePerClass || 0, subjects: r.subjects || [] };
         });
       })(),
       perClassRates: (t.perClassRates || []).map(r => ({ course: r.course?._id || r.course || '', batch: r.batch?._id || r.batch || '', ratePerClass: r.ratePerClass || 0 })),
@@ -106,7 +109,7 @@ const Teachers = () => {
 
   const handleChange = (field, value) => setFormData(f => ({ ...f, [field]: value }));
 
-  const addAssignedCourse = () => setFormData(f => ({ ...f, assignedCourses: [...f.assignedCourses, { course: '', batch: '', ratePerClass: 0 }] }));
+  const addAssignedCourse = () => setFormData(f => ({ ...f, assignedCourses: [...f.assignedCourses, { course: '', batch: '', ratePerClass: 0, subjects: [] }] }));
   const removeAssignedCourse = (i) => setFormData(f => ({ ...f, assignedCourses: f.assignedCourses.filter((_, idx) => idx !== i) }));
   const updateAssignedCourse = (i, field, val) => setFormData(f => {
     const arr = [...f.assignedCourses]; arr[i] = { ...arr[i], [field]: val }; return { ...f, assignedCourses: arr };
@@ -140,7 +143,7 @@ const Teachers = () => {
         companyId,
         assignedCourses: formData.assignedCourses
           .filter(r => r.course && r.course !== '')
-          .map(r => ({ course: r.course, batch: r.batch || null, ratePerClass: Number(r.ratePerClass) || 0 })),
+          .map(r => ({ course: r.course, batch: r.batch || null, ratePerClass: Number(r.ratePerClass) || 0, subjects: Array.isArray(r.subjects) ? r.subjects : [] })),
         perClassRates: formData.assignedCourses
           .filter(r => r.course && r.course !== '')
           .map(r => ({ course: r.course, batch: r.batch || null, ratePerClass: Number(r.ratePerClass) || 0 })),
@@ -314,6 +317,15 @@ const Teachers = () => {
                       onChange={e => updateAssignedCourse(i, 'ratePerClass', e.target.value)}
                       InputProps={{ startAdornment: <InputAdornment position="start">PKR</InputAdornment> }} />
                   )}
+                  <TextField
+                    size="small"
+                    label="Subjects (comma-separated)"
+                    placeholder="e.g. Physics, Math"
+                    sx={{ flex: '2 1 200px', minWidth: 160 }}
+                    value={subjectsToString(r.subjects)}
+                    onChange={e => updateAssignedCourse(i, 'subjects', stringToSubjects(e.target.value))}
+                    helperText={r.subjects?.length > 0 ? `${r.subjects.length} subject(s)` : 'Leave blank for class-only tracking'}
+                  />
                   <IconButton size="small" color="error" onClick={() => removeAssignedCourse(i)}><DeleteIcon fontSize="small" /></IconButton>
                 </Box>
               );

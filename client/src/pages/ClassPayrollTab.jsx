@@ -44,11 +44,18 @@ const ClassPayrollTab = ({ companyId }) => {
     try {
       const { data } = await api.fetchClassLogs(companyId, date);
       setLogData(data);
+      // Build selections: Set<"batchId::subject">
+      // If batch has no subjects defined, use batchId:: (empty subject = whole-batch session)
       const sel = {};
       data.forEach(row => {
-        sel[row.teacher._id] = new Set(
-          row.batches.filter(b => b.logged).map(b => b._id)
-        );
+        sel[row.teacher._id] = new Set();
+        row.batches.forEach(b => {
+          if (b.subjects && b.subjects.length > 0) {
+            b.loggedSubjects.forEach(subj => sel[row.teacher._id].add(`${b._id}::${subj}`));
+          } else {
+            if (b.logged) sel[row.teacher._id].add(`${b._id}::`);
+          }
+        });
       });
       setSelections(sel);
       setLoaded(true);
@@ -59,12 +66,12 @@ const ClassPayrollTab = ({ companyId }) => {
     }
   }, [companyId, date]);
 
-  // ── Toggle a batch checkbox ──────────────────────────────────────────────
-  const handleToggle = (teacherId, batchId) => {
+  // ── Toggle a session key (batchId::subject) ──────────────────────────────
+  const handleToggle = (teacherId, sessionKey) => {
     setSelections(prev => {
       const next = { ...prev };
       const s = new Set(next[teacherId] || []);
-      s.has(batchId) ? s.delete(batchId) : s.add(batchId);
+      s.has(sessionKey) ? s.delete(sessionKey) : s.add(sessionKey);
       next[teacherId] = s;
       return next;
     });
@@ -74,12 +81,11 @@ const ClassPayrollTab = ({ companyId }) => {
   const handleSave = async (teacherId) => {
     setSaving(prev => ({ ...prev, [teacherId]: true }));
     try {
-      await api.saveClassLogs({
-        companyId,
-        teacherId,
-        date,
-        batchIds: [...(selections[teacherId] || [])],
+      const sessions = [...(selections[teacherId] || [])].map(key => {
+        const sep = key.indexOf('::');
+        return { batchId: key.slice(0, sep), subject: key.slice(sep + 2) };
       });
+      await api.saveClassLogs({ companyId, teacherId, date, sessions });
       toast.success('Class log saved');
       await loadClassLogs();
     } catch (err) {
@@ -161,7 +167,14 @@ const ClassPayrollTab = ({ companyId }) => {
 
       {logData.map(row => {
         const sel      = selections[row.teacher._id] || new Set();
-        const daily    = row.batches.reduce((sum, b) => sel.has(b._id) ? sum + (b.ratePerClass || 0) : sum, 0);
+        // Count each selected session (per subject or per batch) × ratePerClass
+        const daily = row.batches.reduce((sum, b) => {
+          if (b.subjects && b.subjects.length > 0) {
+            const activeSubs = b.subjects.filter(s => sel.has(`${b._id}::${s}`)).length;
+            return sum + activeSubs * (b.ratePerClass || 0);
+          }
+          return sel.has(`${b._id}::`) ? sum + (b.ratePerClass || 0) : sum;
+        }, 0);
         const isSaving = saving[row.teacher._id];
 
         return (
@@ -213,39 +226,79 @@ const ClassPayrollTab = ({ companyId }) => {
               ) : (
                 <Grid container spacing={1}>
                   {row.batches.map(batch => {
-                    const checked = sel.has(batch._id);
+                    const hasSubjects = batch.subjects && batch.subjects.length > 0;
+                    // No-subject mode: single whole-batch checkbox
+                    if (!hasSubjects) {
+                      const sessionKey = `${batch._id}::`;
+                      const checked = sel.has(sessionKey);
+                      return (
+                        <Grid item xs={12} sm={6} md={4} key={batch._id}>
+                          <Paper
+                            variant="outlined"
+                            sx={{
+                              p: 1.5, borderRadius: 2, cursor: 'pointer',
+                              borderColor: checked ? theme.palette.success.main : 'divider',
+                              bgcolor: checked ? alpha(theme.palette.success.main, 0.06) : 'background.paper',
+                              transition: 'all 0.15s',
+                              '&:hover': { borderColor: 'primary.main', bgcolor: alpha(theme.palette.primary.main, 0.04) },
+                            }}
+                            onClick={() => handleToggle(row.teacher._id, sessionKey)}
+                          >
+                            <Stack direction="row" alignItems="flex-start" spacing={1}>
+                              <Checkbox checked={checked} size="small" color="success" sx={{ p: 0 }}
+                                onChange={() => handleToggle(row.teacher._id, sessionKey)}
+                                onClick={e => e.stopPropagation()} />
+                              <Box>
+                                <Typography variant="body2" fontWeight={700} color={checked ? 'success.dark' : 'text.primary'}>
+                                  {batch.name}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  <SchoolIcon sx={{ fontSize: 11, mr: 0.3, verticalAlign: 'middle' }} />
+                                  {batch.course?.name || 'Unknown Course'}
+                                </Typography>
+                                <Typography variant="caption" display="block" color={checked ? 'success.main' : 'primary.main'} fontWeight={700}>
+                                  Rs. {fmt(batch.ratePerClass)} / class
+                                </Typography>
+                              </Box>
+                            </Stack>
+                          </Paper>
+                        </Grid>
+                      );
+                    }
+                    // Subject mode: one chip-checkbox per subject
+                    const anyChecked = batch.subjects.some(s => sel.has(`${batch._id}::${s}`));
                     return (
                       <Grid item xs={12} sm={6} md={4} key={batch._id}>
                         <Paper
                           variant="outlined"
                           sx={{
-                            p: 1.5, borderRadius: 2, cursor: 'pointer',
-                            borderColor: checked ? theme.palette.success.main : 'divider',
-                            bgcolor: checked ? alpha(theme.palette.success.main, 0.06) : 'background.paper',
-                            transition: 'all 0.15s',
-                            '&:hover': { borderColor: 'primary.main', bgcolor: alpha(theme.palette.primary.main, 0.04) },
+                            p: 1.5, borderRadius: 2,
+                            borderColor: anyChecked ? theme.palette.success.main : 'divider',
+                            bgcolor: anyChecked ? alpha(theme.palette.success.main, 0.04) : 'background.paper',
                           }}
-                          onClick={() => handleToggle(row.teacher._id, batch._id)}
                         >
-                          <Stack direction="row" alignItems="flex-start" spacing={1}>
-                            <Checkbox
-                              checked={checked} size="small"
-                              color="success" sx={{ p: 0 }}
-                              onChange={() => handleToggle(row.teacher._id, batch._id)}
-                              onClick={e => e.stopPropagation()}
-                            />
-                            <Box>
-                              <Typography variant="body2" fontWeight={700} color={checked ? 'success.dark' : 'text.primary'}>
-                                {batch.name}
-                              </Typography>
-                              <Typography variant="caption" color="text.secondary">
-                                <SchoolIcon sx={{ fontSize: 11, mr: 0.3, verticalAlign: 'middle' }} />
-                                {batch.course?.name || 'Unknown Course'}
-                              </Typography>
-                              <Typography variant="caption" display="block" color={checked ? 'success.main' : 'primary.main'} fontWeight={700}>
-                                Rs. {fmt(batch.ratePerClass)} / class
-                              </Typography>
-                            </Box>
+                          <Typography variant="body2" fontWeight={700} sx={{ mb: 0.5 }}>{batch.name}</Typography>
+                          <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                            <SchoolIcon sx={{ fontSize: 11, mr: 0.3, verticalAlign: 'middle' }} />
+                            {batch.course?.name || 'Unknown Course'} &nbsp;·&nbsp; Rs. {fmt(batch.ratePerClass)} / subject
+                          </Typography>
+                          <Stack direction="row" flexWrap="wrap" gap={0.75}>
+                            {batch.subjects.map(subj => {
+                              const sKey = `${batch._id}::${subj}`;
+                              const isOn = sel.has(sKey);
+                              return (
+                                <Chip
+                                  key={subj}
+                                  label={subj}
+                                  size="small"
+                                  clickable
+                                  color={isOn ? 'success' : 'default'}
+                                  variant={isOn ? 'filled' : 'outlined'}
+                                  onClick={() => handleToggle(row.teacher._id, sKey)}
+                                  sx={{ fontWeight: isOn ? 700 : 400 }}
+                                />
+                              );
+                            })}
                           </Stack>
                         </Paper>
                       </Grid>
@@ -302,7 +355,7 @@ const ClassPayrollTab = ({ companyId }) => {
             <TableHead sx={{ bgcolor: alpha(theme.palette.primary.main, 0.06) }}>
               <TableRow>
                 <TableCell sx={{ fontWeight: 700 }}>Teacher</TableCell>
-                <TableCell sx={{ fontWeight: 700 }}>Course</TableCell>
+                <TableCell sx={{ fontWeight: 700 }}>Course / Subject</TableCell>
                 <TableCell align="center" sx={{ fontWeight: 700 }}>Classes Taught</TableCell>
                 <TableCell align="right" sx={{ fontWeight: 700 }}>Rate / Class</TableCell>
                 <TableCell align="right" sx={{ fontWeight: 700 }}>Amount</TableCell>
@@ -324,7 +377,10 @@ const ClassPayrollTab = ({ companyId }) => {
                         </TableCell>
                       )}
                       <TableCell>
-                        <Chip label={row.courseName} size="small" variant="outlined" sx={{ fontWeight: 600 }} />
+                        <Stack spacing={0.5}>
+                          <Chip label={row.courseName} size="small" variant="outlined" sx={{ fontWeight: 600 }} />
+                          {row.subject ? <Chip label={row.subject} size="small" color="info" variant="outlined" sx={{ fontSize: 11 }} /> : null}
+                        </Stack>
                       </TableCell>
                       <TableCell align="center">
                         <Typography fontWeight={700} color="primary">{row.classCount}</Typography>

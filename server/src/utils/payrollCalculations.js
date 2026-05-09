@@ -19,13 +19,27 @@ export const calculateFixedSalary = (monthlySalary, annualSalary = 0) => {
  */
 const idToString = (value) => value?._id?.toString?.() || value?.toString?.() || '';
 
-const findBestRate = (perClassRates, courseId, batchId) => {
-  if (batchId) {
+const findBestRate = (perClassRates, courseId, batchId, subject = '') => {
+  if (batchId && subject) {
+    // 1. Most specific: course + batch + subject
     const specific = perClassRates.find(
-      (r) => idToString(r.course) === courseId && idToString(r.batch) === batchId.toString()
+      (r) => idToString(r.course) === courseId && idToString(r.batch) === batchId.toString() && (r.subject || '') === subject
     );
     if (specific) return specific;
   }
+  if (batchId) {
+    // 2. course + batch (no subject)
+    const withBatch = perClassRates.find(
+      (r) => idToString(r.course) === courseId && idToString(r.batch) === batchId.toString() && !r.subject
+    );
+    if (withBatch) return withBatch;
+    // 3. course + batch (any — legacy entries without subject field)
+    const legacy = perClassRates.find(
+      (r) => idToString(r.course) === courseId && idToString(r.batch) === batchId.toString()
+    );
+    if (legacy) return legacy;
+  }
+  // 4. course-level fallback
   return perClassRates.find(
     (r) => idToString(r.course) === courseId && !r.batch
   );
@@ -40,18 +54,20 @@ export const calculatePerClassEarnings = (classAttendance, perClassRates) => {
   let totalAmount = 0;
   let totalClasses = 0;
 
-  // Group classes by course+batch combination
+  // Group classes by course+batch+subject combination
   classAttendance.forEach((attendance) => {
     if (!attendance.classHeld || !attendance.course) return;
 
     const courseId = attendance.course.toString();
     const batchId  = attendance.batch ? attendance.batch.toString() : null;
-    const comboKey = `${courseId}::${batchId || ''}`;
+    const subject  = attendance.subject || '';
+    const comboKey = `${courseId}::${batchId || ''}::${subject}`;
 
     if (!breakdown[comboKey]) {
       breakdown[comboKey] = {
         course:     attendance.course,
         batch:      attendance.batch || null,
+        subject,
         courseName: attendance.courseName || 'Unknown Course',
         batchName:  attendance.batchName  || null,
         classCount: 0,
@@ -64,11 +80,11 @@ export const calculatePerClassEarnings = (classAttendance, perClassRates) => {
     totalClasses += 1;
   });
 
-  // Calculate amounts using batch-aware rate lookup
+  // Calculate amounts using subject-aware rate lookup
   Object.values(breakdown).forEach((item) => {
     const courseId = item.course?.toString();
     const batchId  = item.batch?.toString();
-    const rate = findBestRate(perClassRates, courseId, batchId);
+    const rate = findBestRate(perClassRates, courseId, batchId, item.subject || '');
     if (rate) {
       item.ratePerClass = rate.ratePerClass;
       item.amount = item.classCount * rate.ratePerClass;

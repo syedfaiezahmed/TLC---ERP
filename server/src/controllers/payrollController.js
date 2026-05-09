@@ -82,24 +82,27 @@ const buildAttendanceForCalc = async (companyId, teacherId, start, end) => {
       $group: {
         _id: {
           dateStr: { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
-          course: '$course',
-          batch: '$batch',
+          course:  '$course',
+          batch:   '$batch',
+          subject: '$subject',
         },
-        date: { $first: '$date' },
-        course: { $first: '$course' },
-        batch: { $first: '$batch' },
+        date:      { $first: '$date' },
+        course:    { $first: '$course' },
+        batch:     { $first: '$batch' },
+        subject:   { $first: '$subject' },
         courseName: { $first: { $arrayElemAt: ['$courseDoc.name', 0] } },
         batchName:  { $first: { $arrayElemAt: ['$batchDoc.name', 0] } },
       },
     },
   ]);
 
-  // Each element = one class held (unique date+course+batch combo)
+  // Each element = one class session (unique date+course+batch+subject combo)
   return sessions.map((s) => ({
-    classHeld: true,
+    classHeld:  true,
     date:       s.date,
     course:     s.course,
-    batch:      s.batch  || null,
+    batch:      s.batch   || null,
+    subject:    s.subject || '',
     courseName: s.courseName || 'Unknown Course',
     batchName:  s.batchName  || null,
   }));

@@ -8,13 +8,15 @@ const teacherClassLogSchema = new mongoose.Schema(
     date:         { type: Date, required: true },
     batch:        { type: mongoose.Schema.Types.ObjectId, required: true, ref: 'Batch' },
     course:       { type: mongoose.Schema.Types.ObjectId, required: true, ref: 'Course' },
+    subject:      { type: String, default: '' },
     ratePerClass: { type: Number, required: true, default: 0 },
   },
   { timestamps: true }
 );
 
-// One class-session per teacher per batch per day
-teacherClassLogSchema.index({ company: 1, teacher: 1, date: 1, batch: 1 }, { unique: true });
+// One class-session per teacher per batch per subject per day
+// subject='' is the default (no subject tracking) — still unique per batch+day if no subjects used
+teacherClassLogSchema.index({ company: 1, teacher: 1, date: 1, batch: 1, subject: 1 }, { unique: true });
 teacherClassLogSchema.index({ company: 1, date: 1 });
 teacherClassLogSchema.index({ company: 1, teacher: 1, date: 1 });
 

@@ -101,10 +101,19 @@ const getClassLogs = async (req, res) => {
       teacher: { $in: teachers.map(t => t._id) },
     }).lean();
 
-    const logSet = new Set(existingLogs.map(l => `${l.teacher}-${l.batch}`));
+    // Map: teacherId -> batchId -> Set<subject>
+    const logMap = {};
+    existingLogs.forEach(l => {
+      const tKey = l.teacher.toString();
+      const bKey = l.batch.toString();
+      if (!logMap[tKey]) logMap[tKey] = {};
+      if (!logMap[tKey][bKey]) logMap[tKey][bKey] = new Set();
+      logMap[tKey][bKey].add(l.subject || '');
+    });
 
     // 5. Build response: one entry per teacher with their batches
     const result = teachers.map(teacher => {
+      const tIdStr = teacher._id.toString();
       const teacherBatchIds = new Set(
         (teacher.assignedCourses || []).filter(ac => ac.batch).map(ac => ac.batch?._id?.toString() || ac.batch.toString())
       );
@@ -124,12 +133,16 @@ const getClassLogs = async (req, res) => {
               r.course?._id?.toString() === b.course?._id?.toString() && !r.batch
             )
           );
+          const subjects = ac?.subjects?.filter(Boolean) || [];
+          const loggedSubjects = logMap[tIdStr]?.[bIdStr] ? [...logMap[tIdStr][bIdStr]] : [];
           return {
             _id: b._id,
             name: b.name,
             course: b.course,
+            subjects,
             ratePerClass: ac?.ratePerClass || fallbackRate?.ratePerClass || 0,
-            logged: logSet.has(`${teacher._id}-${b._id}`),
+            loggedSubjects,
+            logged: loggedSubjects.length > 0,
           };
         }),
       };
@@ -144,12 +157,19 @@ const getClassLogs = async (req, res) => {
 
 // @desc  Save class logs for one teacher on one date (replaces existing)
 // @route POST /api/class-logs
+// Body: { companyId, teacherId, date, sessions: [{batchId, subject}] }
+//       OR legacy: { companyId, teacherId, date, batchIds: [id,...] }
 const saveClassLogs = async (req, res) => {
   try {
-    const { companyId, teacherId, date, batchIds = [] } = req.body;
+    const { companyId, teacherId, date, sessions = [], batchIds = [] } = req.body;
     if (!companyId || !teacherId || !date) {
       return res.status(400).json({ message: 'companyId, teacherId and date are required' });
     }
+
+    // Normalise: legacy batchIds → sessions with no subject
+    const allSessions = sessions.length > 0
+      ? sessions
+      : batchIds.map(batchId => ({ batchId, subject: '' }));
 
     const company = await Company.findById(companyId);
     if (!company) return res.status(404).json({ message: 'Company not found' });
@@ -176,25 +196,23 @@ const saveClassLogs = async (req, res) => {
     // Delete existing logs for this teacher on this date
     await TeacherClassLog.deleteMany({ company: companyId, teacher: teacherId, date: dayRange(date) });
 
-    if (batchIds.length === 0) return res.json({ message: 'Class logs cleared', count: 0 });
+    if (allSessions.length === 0) return res.json({ message: 'Class logs cleared', count: 0 });
 
     const allowedBatchIds = new Set(
-      (teacher.assignedCourses || [])
-        .map(ac => ac.batch?.toString())
-        .filter(Boolean)
+      (teacher.assignedCourses || []).map(ac => ac.batch?.toString()).filter(Boolean)
     );
-    const invalidBatchIds = batchIds.filter(batchId => !allowedBatchIds.has(batchId.toString()));
+    const uniqueBatchIds = [...new Set(allSessions.map(s => s.batchId.toString()))];
+    const invalidBatchIds = uniqueBatchIds.filter(id => !allowedBatchIds.has(id));
     if (invalidBatchIds.length > 0) {
       return res.status(400).json({ message: 'One or more selected batches are not assigned to this teacher' });
     }
 
-    // Fetch the batches to get course info
-    const batches = await Batch.find({ _id: { $in: batchIds }, company: companyId, status: { $in: ['Ongoing', 'Upcoming'] } }).lean();
-    if (batches.length !== batchIds.length) {
-      return res.status(400).json({ message: 'One or more selected batches are invalid or inactive' });
-    }
+    const batches = await Batch.find({ _id: { $in: uniqueBatchIds }, company: companyId, status: { $in: ['Ongoing', 'Upcoming'] } }).lean();
+    const batchMap = Object.fromEntries(batches.map(b => [b._id.toString(), b]));
 
-    const docs = batches.map(b => {
+    const docs = allSessions.map(({ batchId, subject = '' }) => {
+      const b = batchMap[batchId.toString()];
+      if (!b) return null;
       const rate = (
         teacher.perClassRates.find(r =>
           r.course?.toString() === b.course?.toString() &&
@@ -210,9 +228,10 @@ const saveClassLogs = async (req, res) => {
         date:         dateObj,
         batch:        b._id,
         course:       b.course,
+        subject:      subject || '',
         ratePerClass: rate?.ratePerClass || 0,
       };
-    });
+    }).filter(Boolean);
 
     const created = await TeacherClassLog.insertMany(docs, { ordered: false });
     return res.status(201).json({ message: 'Class logs saved', count: created.length });
@@ -242,7 +261,7 @@ const getMonthlySummary = async (req, res) => {
       ...onlyPresentLateTeacherAttendanceLookup,
       {
         $group: {
-          _id: { teacher: '$teacher', course: '$course' },
+          _id: { teacher: '$teacher', course: '$course', subject: '$subject' },
           classCount:   { $sum: 1 },
           ratePerClass: { $first: '$ratePerClass' },
           amount:       { $sum: '$ratePerClass' },
@@ -265,6 +284,7 @@ const getMonthlySummary = async (req, res) => {
             $push: {
               course:       '$_id.course',
               courseName:   { $ifNull: ['$courseInfo.name', 'Unknown'] },
+              subject:      '$_id.subject',
               classCount:   '$classCount',
               ratePerClass: '$ratePerClass',
               amount:       '$amount',
