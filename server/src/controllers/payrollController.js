@@ -35,6 +35,13 @@ const monthBounds = (monthStr) => {
   return { start, end };
 };
 
+// Last moment of the salary month — used as the Ledger date for salary accrual entries.
+// Salary expense belongs to the period it was EARNED, not when it was approved or paid.
+const salaryMonthEnd = (month) => {
+  const d = new Date(month);
+  return new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
+};
+
 const buildAttendanceForCalc = async (companyId, teacherId, start, end) => {
   const sessions = await TeacherClassLog.aggregate([
     {
@@ -375,12 +382,14 @@ const approvePayroll = async (req, res) => {
     const updated = await payroll.save();
 
     // Post accrual journal: Dr Salary Expense  Cr Salary Payable
+    // Date = last day of the salary month so expense appears in the correct P&L period
+    // regardless of when the approval happens.
     try {
       await postPayrollJournal({
         companyId: payroll.company._id,
         teacherId: payroll.teacher,
         payroll: updated,
-        date: payroll.approvedDate || new Date(),
+        date: salaryMonthEnd(payroll.month),
         isPaid: false,
       });
     } catch (jErr) {

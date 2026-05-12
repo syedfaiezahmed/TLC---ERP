@@ -16,17 +16,20 @@ export const postPayrollJournal = async ({ companyId, teacherId, payroll, date, 
     referenceId: payroll._id,
   };
 
-  const totalSalary = payroll.totalSalary;
-  const netSalary = payroll.netSalary;
+  const netSalary  = payroll.netSalary  || 0;
   const deductions = payroll.deductions || 0;
+  const allowances = payroll.allowances || 0;
+  // Gross cost to the company = net owed to teacher + deductions withheld
+  // = totalSalary + allowances (allowances increase what we owe, deductions reduce it)
+  const grossCost = netSalary + deductions;
 
   const lines = [];
 
-  // Salary Expense (total before deductions)
+  // Salary Expense = gross cost (base + allowances, before deductions)
   lines.push({
     accountName: 'Salary Expense',
     accountType: 'expense',
-    debit: totalSalary,
+    debit: grossCost,
     credit: 0,
     relatedAccount: isPaid ? (paymentMethod === 'Cash' ? 'Cash' : 'Bank') : 'Salary Payable',
     type: 'payroll',

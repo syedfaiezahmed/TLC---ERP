@@ -565,13 +565,24 @@ const getProfitAndLoss = async (req, res) => {
             voucherQuery.generatedDate = { $gte: dateRange.start, $lte: dateRange.end };
         }
 
-        const paymentQuery = {
-            company: new mongoose.Types.ObjectId(companyId),
-            status: 'active'
-        };
-        if (dateRange.start && dateRange.end) {
-            paymentQuery.paymentDate = { $gte: dateRange.start, $lte: dateRange.end };
-        }
+        // Discounts and late-fee revenue are accrual items — they belong to the voucher's
+        // period (generatedDate), not to the month the cash was received. Join each payment
+        // to its voucher and filter by voucher.generatedDate so a May payment for an April
+        // voucher is reported in April's P&L, not May's.
+        const paymentAccrualPipeline = [
+            { $match: { company: new mongoose.Types.ObjectId(companyId), status: 'active' } },
+            { $lookup: { from: 'feevouchers', localField: 'voucher', foreignField: '_id', as: 'vDoc' } },
+            { $unwind: { path: '$vDoc', preserveNullAndEmptyArrays: true } },
+            { $addFields: { reportingDate: { $ifNull: ['$vDoc.generatedDate', '$paymentDate'] } } },
+            ...(dateRange.start && dateRange.end ? [{
+                $match: { reportingDate: { $gte: dateRange.start, $lte: dateRange.end } },
+            }] : []),
+            { $group: {
+                _id: null,
+                scholarshipDiscount: { $sum: { $ifNull: ['$discountAmount', 0] } },
+                lateFeeRevenue:      { $sum: { $ifNull: ['$lateFeeAmount',  0] } },
+            }},
+        ];
 
         const [voucherRevenueAgg, paymentExpenseAgg] = await Promise.all([
             FeeVoucher.aggregate([
@@ -583,16 +594,7 @@ const getProfitAndLoss = async (req, res) => {
                     }
                 }
             ]),
-            FeePayment.aggregate([
-                { $match: paymentQuery },
-                {
-                    $group: {
-                        _id: null,
-                        scholarshipDiscount: { $sum: { $ifNull: ['$discountAmount', 0] } },
-                        lateFeeRevenue: { $sum: { $ifNull: ['$lateFeeAmount', 0] } }
-                    }
-                }
-            ])
+            FeePayment.aggregate(paymentAccrualPipeline),
         ]);
 
         const canonicalFeeRevenue = voucherRevenueAgg[0]?.feeRevenue || 0;
