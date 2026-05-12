@@ -928,6 +928,11 @@ const getDashboardChartData = async (req, res) => {
 // @desc    Get Student Statement
 // @route   GET /api/reports/statement/:companyId
 // @access  Private/Admin
+//
+// ACCRUAL PRINCIPLE: A payment for a voucher generated in month M always belongs
+// to month M in this statement, regardless of when the student actually paid.
+// We join each FeePayment with its FeeVoucher and use voucher.generatedDate as
+// the "reporting date". Payments with no voucher link fall back to paymentDate.
 const getStudentStatement = async (req, res) => {
     try {
         const { companyId } = req.params;
@@ -940,52 +945,57 @@ const getStudentStatement = async (req, res) => {
         const companyObj = new mongoose.Types.ObjectId(companyId);
         const studentObj = new mongoose.Types.ObjectId(studentId);
 
-        const dateRange = (field) => {
-            const clause = {};
-            if (startDate) clause.$gte = new Date(startDate);
-            if (endDate) {
-                const end = new Date(endDate);
-                end.setHours(23, 59, 59, 999);
-                clause.$lte = end;
-            }
-            return Object.keys(clause).length ? { [field]: clause } : {};
-        };
+        // Base pipeline: join payment → its voucher, derive reportingDate
+        const basePaymentPipeline = [
+            { $match: { company: companyObj, student: studentObj, status: 'active' } },
+            { $lookup: { from: 'feevouchers', localField: 'voucher', foreignField: '_id', as: 'vDoc' } },
+            { $unwind: { path: '$vDoc', preserveNullAndEmptyArrays: true } },
+            // reportingDate = the period the fee belongs to (voucher month), not when cash arrived
+            { $addFields: { reportingDate: { $ifNull: ['$vDoc.generatedDate', '$paymentDate'] } } },
+        ];
 
+        // Opening balance: billed before startDate minus payments whose voucher period is before startDate
         let openingBalance = 0;
         if (startDate && !isNaN(new Date(startDate))) {
             const start = new Date(startDate);
             const [openingVouchers, openingPayments] = await Promise.all([
                 FeeVoucher.find({
-                    company: companyObj,
-                    student: studentObj,
+                    company: companyObj, student: studentObj,
                     status: { $ne: 'cancelled' },
-                    generatedDate: { $lt: start }
+                    generatedDate: { $lt: start },
                 }).select('totalFee').lean(),
-                FeePayment.find({
-                    company: companyObj,
-                    student: studentObj,
-                    status: 'active',
-                    paymentDate: { $lt: start }
-                }).select('amount discountAmount').lean()
+                FeePayment.aggregate([
+                    ...basePaymentPipeline,
+                    { $match: { reportingDate: { $lt: start } } },
+                    { $project: { amount: 1, discountAmount: 1 } },
+                ]),
             ]);
-            const openingBilled = openingVouchers.reduce((sum, voucher) => sum + (voucher.totalFee || 0), 0);
-            const openingSettled = openingPayments.reduce((sum, payment) => sum + (payment.amount || 0) + (payment.discountAmount || 0), 0);
+            const openingBilled   = openingVouchers.reduce((s, v) => s + (v.totalFee || 0), 0);
+            const openingSettled  = openingPayments.reduce((s, p) => s + (p.amount || 0) + (p.discountAmount || 0), 0);
             openingBalance = openingBilled - openingSettled;
         }
 
+        // Build period date bounds
+        const periodStart = startDate ? new Date(startDate) : null;
+        const periodEnd   = endDate   ? (() => { const e = new Date(endDate); e.setHours(23, 59, 59, 999); return e; })() : null;
+        const periodFilter = (periodStart || periodEnd)
+            ? { ...(periodStart ? { $gte: periodStart } : {}), ...(periodEnd ? { $lte: periodEnd } : {}) }
+            : null;
+
+        const voucherFilter = {
+            company: companyObj, student: studentObj,
+            status: { $ne: 'cancelled' },
+            ...(periodFilter ? { generatedDate: periodFilter } : {}),
+        };
+        const paymentPeriodPipeline = [
+            ...basePaymentPipeline,
+            ...(periodFilter ? [{ $match: { reportingDate: periodFilter } }] : []),
+            { $sort: { reportingDate: 1, createdAt: 1 } },
+        ];
+
         const [vouchers, payments] = await Promise.all([
-            FeeVoucher.find({
-                company: companyObj,
-                student: studentObj,
-                status: { $ne: 'cancelled' },
-                ...dateRange('generatedDate')
-            }).sort({ generatedDate: 1, createdAt: 1 }).lean(),
-            FeePayment.find({
-                company: companyObj,
-                student: studentObj,
-                status: 'active',
-                ...dateRange('paymentDate')
-            }).sort({ paymentDate: 1, createdAt: 1 }).lean()
+            FeeVoucher.find(voucherFilter).sort({ generatedDate: 1, createdAt: 1 }).lean(),
+            FeePayment.aggregate(paymentPeriodPipeline),
         ]);
 
         const entries = [];
@@ -997,28 +1007,39 @@ const getStudentStatement = async (req, res) => {
                 reference: voucher.voucherNumber,
                 debit: voucher.totalFee || 0,
                 credit: 0,
-                source: 'voucher'
+                source: 'voucher',
             });
         });
         payments.forEach(payment => {
+            // Flag late payments so the description notes when cash was actually received
+            const rDate = payment.reportingDate ? new Date(payment.reportingDate) : null;
+            const pDate = payment.paymentDate   ? new Date(payment.paymentDate)   : null;
+            const isLate = rDate && pDate && (
+                rDate.getFullYear() !== pDate.getFullYear() || rDate.getMonth() !== pDate.getMonth()
+            );
+            const lateSuffix = isLate
+                ? ` (paid: ${pDate.toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' })})`
+                : '';
             entries.push({
                 _id: payment._id,
-                date: payment.paymentDate,
-                description: `Fee Payment #${payment.paymentNumber}`,
+                date: payment.reportingDate,   // accrual period date (voucher month)
+                paymentDate: payment.paymentDate,
+                description: `Fee Payment #${payment.paymentNumber}${lateSuffix}`,
                 reference: payment.referenceNumber || payment.transactionId || payment.paymentNumber,
                 debit: 0,
                 credit: payment.amount || 0,
-                source: 'payment'
+                source: 'payment',
             });
             if ((payment.discountAmount || 0) > 0) {
                 entries.push({
                     _id: `${payment._id}-discount`,
-                    date: payment.paymentDate,
+                    date: payment.reportingDate,
+                    paymentDate: payment.paymentDate,
                     description: `Scholarship/Discount on Payment #${payment.paymentNumber}`,
                     reference: payment.paymentNumber,
                     debit: 0,
                     credit: payment.discountAmount || 0,
-                    source: 'discount'
+                    source: 'discount',
                 });
             }
         });
@@ -1029,7 +1050,7 @@ const getStudentStatement = async (req, res) => {
         let totalReceived = 0;
         let totalDiscount = 0;
         let runningBalance = openingBalance;
-        
+
         const statement = entries.map(entry => {
             const dr = entry.debit || 0;
             const cr = entry.credit || 0;
@@ -1047,7 +1068,7 @@ const getStudentStatement = async (req, res) => {
             totalReceived,
             totalDiscount,
             totalSettled: totalCredit,
-            closingBalance: openingBalance + totalDebit - totalCredit 
+            closingBalance: openingBalance + totalDebit - totalCredit,
         };
 
         res.json({ entries: statement, summary });
@@ -1056,6 +1077,14 @@ const getStudentStatement = async (req, res) => {
     }
 };
 
+// @desc    Get Teacher Statement
+// @route   GET /api/reports/teacher-statement/:companyId
+// @access  Private/Admin
+//
+// ACCRUAL PRINCIPLE: A salary payment for payroll month M always belongs to
+// month M in this statement, regardless of when the salary was actually paid.
+// We use payroll.month as the reporting date for both the obligation and the
+// payment entry so that late salary payments are still reported in their month.
 const getTeacherStatement = async (req, res) => {
     try {
         const { companyId } = req.params;
@@ -1068,34 +1097,80 @@ const getTeacherStatement = async (req, res) => {
         const companyObj = new mongoose.Types.ObjectId(companyId);
         const teacherObj = new mongoose.Types.ObjectId(teacherId);
 
-        const dateMatch = {};
-        if (startDate) dateMatch.$gte = new Date(startDate);
-        if (endDate)   dateMatch.$lte = new Date(endDate);
+        // Build month range filter against Payroll.month
+        const monthFilter = {};
+        if (startDate) monthFilter.$gte = new Date(startDate);
+        if (endDate) {
+            const e = new Date(endDate); e.setHours(23, 59, 59, 999);
+            monthFilter.$lte = e;
+        }
 
-        const query = {
-            company: companyObj,
-            teacher: teacherObj,
-            ...(Object.keys(dateMatch).length ? { date: dateMatch } : {}),
-        };
-
-        const ledgerEntries = await Ledger.find(query)
-            .sort({ date: 1, createdAt: 1 })
-            .lean();
-
+        // Opening balance = sum of netSalary for payrolls in months BEFORE startDate
+        // that have NOT been paid yet (still owed to the teacher).
         let openingBalance = 0;
         if (startDate && !isNaN(new Date(startDate))) {
-            const openingAgg = await Ledger.aggregate([
-                { $match: { company: companyObj, teacher: teacherObj, accountName: 'Accounts Payable', date: { $lt: new Date(startDate) } } },
-                { $group: { _id: null, bal: { $sum: { $subtract: ['$credit', '$debit'] } } } }
-            ]);
-            openingBalance = openingAgg.length ? openingAgg[0].bal : 0;
+            const priorUnpaid = await Payroll.find({
+                company: companyObj,
+                teacher: teacherObj,
+                status: { $in: ['draft', 'approved'] },
+                month: { $lt: new Date(startDate) },
+            }).select('netSalary').lean();
+            openingBalance = priorUnpaid.reduce((s, p) => s + (p.netSalary || 0), 0);
         }
+
+        const payrolls = await Payroll.find({
+            company: companyObj,
+            teacher: teacherObj,
+            status: { $ne: 'cancelled' },
+            ...(Object.keys(monthFilter).length ? { month: monthFilter } : {}),
+        }).sort({ month: 1, createdAt: 1 }).lean();
+
+        // Build entries: salary-due entry + payment entry (if paid) per payroll
+        const entries = [];
+        payrolls.forEach(payroll => {
+            const monthLabel = new Date(payroll.month).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+
+            // Salary obligation (credit — amount owed to teacher)
+            entries.push({
+                _id: `${payroll._id}-due`,
+                date: payroll.month,
+                type: 'salary_due',
+                accountName: 'Salary Payable',
+                description: `Salary — ${monthLabel} (${payroll.salaryType}, ${payroll.status})`,
+                reference: String(payroll._id),
+                debit: 0,
+                credit: payroll.netSalary || 0,
+            });
+
+            // Payment (debit — money disbursed): use payroll.month NOT paidDate so it
+            // always closes in the salary month even when paid in a later month.
+            if (payroll.status === 'paid' && (payroll.netSalary || 0) > 0) {
+                const isLate = payroll.paidDate &&
+                    new Date(payroll.paidDate).getMonth() !== new Date(payroll.month).getMonth();
+                const lateSuffix = isLate
+                    ? ` (paid: ${new Date(payroll.paidDate).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' })})`
+                    : '';
+                entries.push({
+                    _id: `${payroll._id}-paid`,
+                    date: payroll.month,          // accrual period — NOT paidDate
+                    paidDate: payroll.paidDate,
+                    type: 'salary_payment',
+                    accountName: payroll.paymentMethod === 'Cash' ? 'Cash' : 'Bank',
+                    description: `Salary Paid via ${payroll.paymentMethod || 'Cash'}${lateSuffix}`,
+                    reference: payroll.paymentReference || String(payroll._id),
+                    debit: payroll.netSalary || 0,
+                    credit: 0,
+                });
+            }
+        });
+
+        entries.sort((a, b) => new Date(a.date) - new Date(b.date));
 
         let totalDebit = 0;
         let totalCredit = 0;
         let runningBalance = openingBalance;
 
-        const statement = ledgerEntries.map(entry => {
+        const statement = entries.map(entry => {
             const dr = entry.debit || 0;
             const cr = entry.credit || 0;
             totalDebit += dr;
@@ -1108,7 +1183,7 @@ const getTeacherStatement = async (req, res) => {
             openingBalance,
             totalBills: totalCredit,
             totalPaid: totalDebit,
-            closingBalance: openingBalance + totalCredit - totalDebit
+            closingBalance: openingBalance + totalCredit - totalDebit,
         };
 
         res.json({ entries: statement, summary });

@@ -455,17 +455,31 @@ const getStudentLedgerReport = async (req, res) => {
         };
         const vouchers = await FeeVoucher.find(voucherMatch).sort({ generatedDate: 1 }).lean();
 
-        // ── CREDITS: Active payments (cash received) ─────────────────────────
-        const paymentMatch = {
-            company: companyObjectId,
-            student: studentObjectId,
-            status: 'active',
-            ...dateInRange('paymentDate', startDate, endDate),
-        };
-        const payments = await FeePayment.find(paymentMatch)
-            .populate('receivedBy', 'name')
-            .sort({ paymentDate: 1 })
-            .lean();
+        // ── CREDITS: Active payments, attributed to their voucher's period ──
+        // Accrual principle: if a payment was made in month M+1 for a voucher
+        // generated in month M, report it in month M (use voucher.generatedDate
+        // as the "reportingDate"). Payments with no voucher fall back to paymentDate.
+        const paymentAggregatePipeline = [
+            { $match: { company: companyObjectId, student: studentObjectId, status: 'active' } },
+            { $lookup: { from: 'feevouchers', localField: 'voucher', foreignField: '_id', as: 'vDoc' } },
+            { $unwind: { path: '$vDoc', preserveNullAndEmptyArrays: true } },
+            { $lookup: { from: 'users', localField: 'receivedBy', foreignField: '_id', as: 'receivedByDoc' } },
+            { $unwind: { path: '$receivedByDoc', preserveNullAndEmptyArrays: true } },
+            { $addFields: {
+                reportingDate: { $ifNull: ['$vDoc.generatedDate', '$paymentDate'] },
+                receivedByName: '$receivedByDoc.name',
+            }},
+            ...(startDate || endDate ? [{
+                $match: {
+                    reportingDate: {
+                        ...(startDate ? { $gte: new Date(startDate) } : {}),
+                        ...(endDate ? { $lte: (() => { const e = new Date(endDate); e.setHours(23,59,59,999); return e; })() } : {}),
+                    },
+                },
+            }] : []),
+            { $sort: { reportingDate: 1, createdAt: 1 } },
+        ];
+        const payments = await FeePayment.aggregate(paymentAggregatePipeline);
 
         // ── Build unified ledger ─────────────────────────────────────────────
         const transactions = [];
@@ -485,22 +499,32 @@ const getStudentLedgerReport = async (req, res) => {
         });
 
         payments.forEach(p => {
+            const rDate = p.reportingDate ? new Date(p.reportingDate) : null;
+            const pDate = p.paymentDate   ? new Date(p.paymentDate)   : null;
+            const isLate = rDate && pDate && (
+                rDate.getFullYear() !== pDate.getFullYear() || rDate.getMonth() !== pDate.getMonth()
+            );
+            const lateSuffix = isLate
+                ? ` (paid: ${pDate.toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' })})`
+                : '';
             // Cash payment credit (reduces receivable)
             transactions.push({
-                date: p.paymentDate,
+                date: p.reportingDate,        // accrual period (voucher month)
+                paymentDate: p.paymentDate,   // actual receipt date (for reference)
                 type: 'payment',
-                description: `Payment #${p.paymentNumber} via ${p.paymentMethod}`,
+                description: `Payment #${p.paymentNumber} via ${p.paymentMethod}${lateSuffix}`,
                 reference: p.paymentNumber,
                 debit: 0,
                 credit: p.amount || 0,
                 balance: 0,
                 method: p.paymentMethod,
-                receivedBy: p.receivedBy?.name,
+                receivedBy: p.receivedByName,
             });
             // Discount allowed is a contra-revenue credit that also reduces receivable.
             if (Number(p.discountAmount) > 0) {
                 transactions.push({
-                    date: p.paymentDate,
+                    date: p.reportingDate,
+                    paymentDate: p.paymentDate,
                     type: 'discount',
                     description: `Discount allowed on ${p.paymentNumber}${p.discountReason ? ` — ${p.discountReason}` : ''}`,
                     reference: p.paymentNumber,
