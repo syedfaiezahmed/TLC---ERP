@@ -1107,14 +1107,15 @@ const getTeacherStatement = async (req, res) => {
             monthFilter.$lte = e;
         }
 
-        // Opening balance = sum of netSalary for payrolls in months BEFORE startDate
-        // that have NOT been paid yet (still owed to the teacher).
+        // Opening balance = sum of netSalary for APPROVED (committed) payrolls in months
+        // BEFORE startDate that have NOT been paid yet (still owed to the teacher).
+        // Draft payrolls are excluded — a draft is a calculation, not a posted obligation.
         let openingBalance = 0;
         if (startDate && !isNaN(new Date(startDate))) {
             const priorUnpaid = await Payroll.find({
                 company: companyObj,
                 teacher: teacherObj,
-                status: { $in: ['draft', 'approved'] },
+                status: 'approved',
                 month: { $lt: new Date(startDate) },
             }).select('netSalary').lean();
             openingBalance = priorUnpaid.reduce((s, p) => s + (p.netSalary || 0), 0);

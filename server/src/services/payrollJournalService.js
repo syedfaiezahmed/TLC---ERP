@@ -16,40 +16,24 @@ export const postPayrollJournal = async ({ companyId, teacherId, payroll, date, 
     referenceId: payroll._id,
   };
 
-  const netSalary  = payroll.netSalary  || 0;
-  const deductions = payroll.deductions || 0;
-  const allowances = payroll.allowances || 0;
-  // Gross cost to the company = net owed to teacher + deductions withheld
-  // = totalSalary + allowances (allowances increase what we owe, deductions reduce it)
-  const grossCost = netSalary + deductions;
+  // netSalary is what the company ACTUALLY OWES the teacher after all deductions.
+  // Deductions already reduce netSalary in the Payroll model, so the expense
+  // recognised on the income statement is netSalary — no separate deduction line needed.
+  const netSalary = payroll.netSalary || 0;
 
   const lines = [];
 
-  // Salary Expense = gross cost (base + allowances, before deductions)
+  // DR Salary Expense = netSalary (the earned obligation)
   lines.push({
     accountName: 'Salary Expense',
     accountType: 'expense',
-    debit: grossCost,
+    debit: netSalary,
     credit: 0,
     relatedAccount: isPaid ? (paymentMethod === 'Cash' ? 'Cash' : 'Bank') : 'Salary Payable',
     type: 'payroll',
     teacher: teacherId,
     description: `${description} - Salary Expense`,
   });
-
-  // Deductions (if any)
-  if (deductions > 0) {
-    lines.push({
-      accountName: 'Salary Payable',
-      accountType: 'liability',
-      debit: 0,
-      credit: deductions,
-      relatedAccount: 'Salary Expense',
-      type: 'payroll',
-      teacher: teacherId,
-      description: `${description} - Deductions`,
-    });
-  }
 
   // Payment or Liability
   if (isPaid) {
@@ -63,6 +47,7 @@ export const postPayrollJournal = async ({ companyId, teacherId, payroll, date, 
       type: 'payroll',
       teacher: teacherId,
       description: `${description} - Payment via ${paymentMethod}`,
+      // CR = netSalary balances DR Salary Expense = netSalary
     });
   } else {
     lines.push({
