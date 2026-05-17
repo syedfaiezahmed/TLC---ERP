@@ -173,109 +173,131 @@ const Sidebar = React.memo(({ mobileOpen, handleDrawerToggle }) => {
     return items;
   }, [companyId, userRole, isAdmin, isAccountant, isTeacher, isStudent]);
 
+  // ── QB sidebar tokens ──────────────────────────────────────────────────────
+  const SB = {
+    bg:         '#1C2B36',
+    activeBg:   'rgba(44,160,28,0.13)',
+    activeBar:  '#2CA01C',
+    activeText: '#6EDA60',
+    hoverBg:    'rgba(255,255,255,0.05)',
+    text:       'rgba(255,255,255,0.78)',
+    muted:      'rgba(255,255,255,0.32)',
+    divider:    'rgba(255,255,255,0.07)',
+  };
+
   const drawerContent = (
-    <Box sx={{ 
-      height: '100%', 
-      display: 'flex', 
+    <Box sx={{
+      height: '100%',
+      display: 'flex',
       flexDirection: 'column',
-      bgcolor: '#0F172A', // Strict SaaS Deep Navy
-      color: '#FFFFFF',
-      transition: theme.transitions.create('width', {
-        easing: theme.transitions.easing.sharp,
-        duration: theme.transitions.duration.enteringScreen,
-      }),
+      bgcolor: SB.bg,
+      color: '#FFF',
       width: drawerWidth,
-      overflowX: 'hidden'
+      overflowX: 'hidden',
+      transition: 'width 0.2s ease',
     }}>
-      {/* Brand Header */}
-      <Box sx={{ 
-        p: 2, 
-        display: 'flex', 
-        alignItems: 'center', 
+
+      {/* ── Brand Header ─────────────────────────────────────────────── */}
+      <Box sx={{
+        px: 2, py: 1.5,
+        display: 'flex',
+        alignItems: 'center',
         justifyContent: isCollapsed ? 'center' : 'space-between',
-        minHeight: 64
+        minHeight: 56,
+        borderBottom: `1px solid ${SB.divider}`,
       }}>
         {!isCollapsed && (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Box sx={{ 
-              width: 32, 
-              height: 32, 
-              borderRadius: '8px', 
-              bgcolor: 'primary.main',
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center',
-              boxShadow: `0 4px 8px ${alpha(theme.palette.primary.main, 0.3)}`
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+            <Box sx={{
+              width: 34, height: 34,
+              borderRadius: '10px',
+              bgcolor: '#2CA01C',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 4px 10px rgba(44,160,28,0.4)',
+              flexShrink: 0,
             }}>
-              <SchoolIcon sx={{ color: 'white', fontSize: '1.2rem' }} />
+              <SchoolIcon sx={{ color: '#fff', fontSize: '1.15rem' }} />
             </Box>
             <Box>
-              <Typography variant="subtitle1" fontWeight={800} lineHeight={1} sx={{ color: 'white' }}>
+              <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: '1rem', lineHeight: 1.1, letterSpacing: '-0.01em' }}>
                 TLC
               </Typography>
-              <Typography variant="caption" sx={{ color: alpha('#FFF', 0.4), fontWeight: 700, fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                ERP SUITE
+              <Typography sx={{ color: SB.muted, fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                ERP Suite
               </Typography>
             </Box>
           </Box>
         )}
-        <IconButton 
+        <IconButton
           size="small"
           onClick={() => setIsCollapsed(!isCollapsed)}
-          sx={{ color: alpha('#FFF', 0.5), '&:hover': { bgcolor: alpha('#FFF', 0.1) } }}
+          sx={{ color: SB.muted, '&:hover': { color: '#fff', bgcolor: SB.hoverBg }, borderRadius: '8px' }}
         >
           {isCollapsed ? <MenuIcon fontSize="small" /> : <MenuOpenIcon fontSize="small" />}
         </IconButton>
       </Box>
 
-      {/* Navigation List */}
-      <List sx={{ px: 1.5, flexGrow: 1, py: 1, overflowY: 'auto' }}>
+      {/* ── Navigation ───────────────────────────────────────────────── */}
+      <List sx={{ px: 1, pt: 1.5, pb: 1, flexGrow: 1, overflowY: 'auto',
+        '&::-webkit-scrollbar': { width: 4 },
+        '&::-webkit-scrollbar-track': { background: 'transparent' },
+        '&::-webkit-scrollbar-thumb': { background: SB.divider, borderRadius: 4 },
+      }}>
         {menuItems.map((item, index) => {
-          if (item.type === 'divider') return <Divider key={index} sx={{ my: 1.5, mx: 1, bgcolor: alpha('#FFF', 0.08) }} />;
+          if (item.type === 'divider') {
+            return <Box key={index} sx={{ my: 1, mx: 1, height: '1px', bgcolor: SB.divider }} />;
+          }
           if (item.type === 'header') {
-            return !isCollapsed && (
-              <Typography key={index} variant="caption" sx={{ px: 1.5, py: 1, display: 'block', color: alpha('#FFF', 0.3), fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', fontSize: '0.6rem' }}>
-                {item.text}
-              </Typography>
+            return !isCollapsed ? (
+              <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, pt: 0.5, pb: 0.75 }}>
+                <Box sx={{ width: 4, height: 4, borderRadius: '50%', bgcolor: '#2CA01C', flexShrink: 0 }} />
+                <Typography sx={{ color: SB.muted, fontSize: '0.6rem', fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                  {item.text}
+                </Typography>
+              </Box>
+            ) : (
+              <Box key={index} sx={{ my: 0.5, mx: 'auto', width: 20, height: '1px', bgcolor: SB.divider }} />
             );
           }
-          
+
           const isActive = location.pathname.startsWith(item.path);
           return (
             <ListItem key={item.text || index} disablePadding sx={{ mb: 0.25 }}>
-              <Tooltip title={isCollapsed ? item.text : ""} placement="right">
-                <ListItemButton 
+              <Tooltip title={isCollapsed ? item.text : ''} placement="right" arrow>
+                <ListItemButton
                   onClick={() => navigate(item.path)}
-                  selected={isActive}
                   sx={{
                     borderRadius: '8px',
-                    py: 1,
-                    px: isCollapsed ? 0 : 1.5,
-                    minHeight: 40,
+                    py: 0.9,
+                    px: isCollapsed ? 0 : 1.25,
+                    minHeight: 38,
                     justifyContent: isCollapsed ? 'center' : 'flex-start',
-                    '&.Mui-selected': {
-                      bgcolor: 'primary.main',
-                      color: 'white',
-                      '&:hover': { bgcolor: 'primary.dark' },
-                      '& .MuiListItemIcon-root': { color: 'white' }
-                    },
+                    position: 'relative',
+                    bgcolor: isActive ? SB.activeBg : 'transparent',
+                    borderLeft: isActive ? `3px solid ${SB.activeBar}` : '3px solid transparent',
+                    transition: 'all 0.15s ease',
                     '&:hover': {
-                      bgcolor: alpha('#FFF', 0.05),
-                      '& .MuiListItemIcon-root': { color: 'white' }
-                    }
+                      bgcolor: isActive ? SB.activeBg : SB.hoverBg,
+                    },
                   }}
                 >
-                  <ListItemIcon sx={{ 
-                    color: isActive ? 'white' : alpha('#FFF', 0.5),
-                    minWidth: isCollapsed ? 0 : 32,
+                  <ListItemIcon sx={{
+                    color: isActive ? SB.activeText : SB.text,
+                    minWidth: isCollapsed ? 0 : 30,
                     justifyContent: 'center',
+                    transition: 'color 0.15s',
                   }}>
-                    {React.cloneElement(item.icon, { sx: { fontSize: '1.1rem' } })}
+                    {React.cloneElement(item.icon, { sx: { fontSize: '1.05rem' } })}
                   </ListItemIcon>
                   {!isCollapsed && (
-                    <ListItemText 
-                      primary={item.text} 
-                      primaryTypographyProps={{ fontSize: '0.8125rem', fontWeight: isActive ? 700 : 500 }} 
+                    <ListItemText
+                      primary={item.text}
+                      primaryTypographyProps={{
+                        fontSize: '0.8rem',
+                        fontWeight: isActive ? 700 : 500,
+                        color: isActive ? '#fff' : SB.text,
+                        letterSpacing: '0.01em',
+                      }}
                     />
                   )}
                 </ListItemButton>
@@ -285,46 +307,63 @@ const Sidebar = React.memo(({ mobileOpen, handleDrawerToggle }) => {
         })}
       </List>
 
-      {/* User Footer */}
-      <Box sx={{ p: 1.5, borderTop: `1px solid ${alpha('#FFF', 0.08)}` }}>
-        <Box sx={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: 1.5, 
-          p: 1, 
+      {/* ── User Footer ──────────────────────────────────────────────── */}
+      <Box sx={{ p: 1.25, borderTop: `1px solid ${SB.divider}` }}>
+        {/* Profile row */}
+        <Box sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1.25,
+          px: 1, py: 0.75,
           borderRadius: '10px',
-          bgcolor: alpha('#FFF', 0.04),
-          mb: 1.5,
-          justifyContent: isCollapsed ? 'center' : 'flex-start'
+          bgcolor: 'rgba(255,255,255,0.04)',
+          mb: 1,
+          justifyContent: isCollapsed ? 'center' : 'flex-start',
         }}>
-          <Avatar sx={{ width: 32, height: 32, bgcolor: 'secondary.main', fontWeight: 800, fontSize: '0.8rem' }}>
-            {authData?.name?.charAt(0) || 'U'}
+          <Avatar sx={{
+            width: 30, height: 30,
+            bgcolor: '#2CA01C',
+            fontSize: '0.78rem', fontWeight: 800,
+            flexShrink: 0,
+          }}>
+            {authData?.name?.charAt(0)?.toUpperCase() || 'U'}
           </Avatar>
           {!isCollapsed && (
-            <Box sx={{ minWidth: 0 }}>
-              <Typography variant="body2" noWrap sx={{ color: 'white', fontWeight: 700 }}>{authData?.name || 'User'}</Typography>
-              <Typography variant="caption" sx={{ color: alpha('#FFF', 0.4), display: 'block', fontSize: '0.7rem' }}>
+            <Box sx={{ minWidth: 0, flex: 1 }}>
+              <Typography noWrap sx={{ color: '#fff', fontSize: '0.8rem', fontWeight: 700, lineHeight: 1.2 }}>
+                {authData?.name || 'User'}
+              </Typography>
+              <Typography sx={{ color: SB.muted, fontSize: '0.67rem', textTransform: 'capitalize', lineHeight: 1.3 }}>
                 {authData?.role || 'Staff'}
               </Typography>
             </Box>
           )}
         </Box>
-        <Button 
-          fullWidth
-          variant="contained"
-          color="secondary"
-          size="small"
-          onClick={handleLogout}
-          startIcon={<LogoutIcon sx={{ fontSize: '1rem' }} />}
-          sx={{ 
-            borderRadius: '8px', 
-            height: 36,
-            justifyContent: isCollapsed ? 'center' : 'center',
-            '& .MuiButton-startIcon': { margin: isCollapsed ? 0 : 'inherit' }
-          }}
-        >
-          {!isCollapsed && "Logout"}
-        </Button>
+
+        {/* Logout button */}
+        <Tooltip title={isCollapsed ? 'Logout' : ''} placement="right">
+          <ListItemButton
+            onClick={handleLogout}
+            sx={{
+              borderRadius: '8px',
+              py: 0.85,
+              px: isCollapsed ? 0 : 1.25,
+              justifyContent: 'center',
+              gap: 1,
+              bgcolor: 'rgba(217,45,32,0.08)',
+              border: '1px solid rgba(217,45,32,0.18)',
+              '&:hover': { bgcolor: 'rgba(217,45,32,0.16)' },
+              transition: 'background 0.15s',
+            }}
+          >
+            <LogoutIcon sx={{ color: '#F87171', fontSize: '0.95rem' }} />
+            {!isCollapsed && (
+              <Typography sx={{ color: '#F87171', fontSize: '0.8rem', fontWeight: 700 }}>
+                Logout
+              </Typography>
+            )}
+          </ListItemButton>
+        </Tooltip>
       </Box>
     </Box>
   );
