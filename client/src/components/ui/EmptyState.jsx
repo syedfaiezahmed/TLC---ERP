@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Typography, alpha, useTheme } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import ActionButton from './ActionButton';
 
 const EmptyState = ({
@@ -10,8 +10,6 @@ const EmptyState = ({
   onAction,
   compact = false
 }) => {
-  const theme = useTheme();
-
   return (
     <Box
       sx={{
@@ -19,34 +17,35 @@ const EmptyState = ({
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        py: compact ? 4 : 8,
-        px: 2,
-        textAlign: 'center'
+        py: compact ? 4 : 7,
+        px: 3,
+        textAlign: 'center',
+        border: '1.5px dashed #D0D5DD',
+        borderRadius: 3,
+        bgcolor: '#FAFBFC',
+        my: 1,
       }}
     >
       {Icon && (
-        <Box
-          sx={{
-            width: compact ? 60 : 80,
-            height: compact ? 60 : 80,
-            borderRadius: 2,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            bgcolor: alpha(theme.palette.primary.main, 0.08),
-            color: alpha(theme.palette.primary.main, 0.6),
-            mb: 2
-          }}
-        >
-          <Icon sx={{ fontSize: compact ? 32 : 40 }} />
+        <Box sx={{
+          width: compact ? 52 : 68,
+          height: compact ? 52 : 68,
+          borderRadius: '50%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          bgcolor: 'rgba(44,160,28,0.08)',
+          color: '#2CA01C',
+          mb: 2,
+        }}>
+          <Icon sx={{ fontSize: compact ? 26 : 34 }} />
         </Box>
       )}
 
       <Typography
-        variant={compact ? 'subtitle1' : 'h6'}
+        variant={compact ? 'subtitle2' : 'subtitle1'}
         fontWeight={700}
-        color="text.primary"
-        sx={{ mb: 0.5 }}
+        sx={{ color: '#3D3D3D', mb: 0.5 }}
       >
         {title}
       </Typography>
@@ -55,7 +54,7 @@ const EmptyState = ({
         <Typography
           variant="body2"
           color="text.secondary"
-          sx={{ mb: actionLabel ? 3 : 0, maxWidth: 400 }}
+          sx={{ mb: actionLabel ? 2.5 : 0, maxWidth: 360, lineHeight: 1.6 }}
         >
           {description}
         </Typography>

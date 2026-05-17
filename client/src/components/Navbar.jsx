@@ -51,106 +51,88 @@ const Navbar = React.memo(({ drawerWidth, handleDrawerToggle }) => {
     return roleLabels[role] || 'User';
   };
 
+  const qbGreen = '#2CA01C';
+
   return (
     <AppBar
-        position="fixed"
-        elevation={0}
-        sx={{
-          width: { sm: `calc(100% - ${drawerWidth}px)` },
-          ml: { sm: `${drawerWidth}px` },
-          bgcolor: 'rgba(255, 255, 255, 0.8)', // Semi-transparent matching background
-          backdropFilter: 'blur(12px)',
-          color: 'text.primary',
-          borderBottom: 'none',
-          pt: 1,
-          pr: 2
-        }}
-      >
-        <Toolbar sx={{ 
-            minHeight: 64, 
-            bgcolor: 'background.paper', 
-            borderRadius: 2.5, 
-            mx: { xs: 1, sm: 2 }, 
-            my: 1, 
-            px: { xs: 2, sm: 3 },
-            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.06)',
-            border: '1px solid',
-            borderColor: 'divider',
-            justifyContent: 'space-between'
-        }}>
-          <Box display="flex" alignItems="center" gap={2}>
-            <IconButton
-              color="inherit"
-              aria-label="open drawer"
-              edge="start"
-              onClick={handleDrawerToggle}
-              sx={{ display: { lg: 'none' } }}
-            >
-              <MenuIcon />
-            </IconButton>
-            
-            {companyName && (
-              <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
-                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>
+      position="fixed"
+      elevation={0}
+      sx={{
+        width: { lg: `calc(100% - ${drawerWidth}px)` },
+        ml: { lg: `${drawerWidth}px` },
+        bgcolor: '#ffffff',
+        color: 'text.primary',
+        borderBottom: '1px solid #E5E7EB',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+        height: 56,
+        justifyContent: 'center',
+      }}
+    >
+      <Toolbar sx={{
+        minHeight: '56px !important',
+        px: { xs: 2, sm: 3 },
+        justifyContent: 'space-between',
+      }}>
+        {/* Left: mobile menu + company name */}
+        <Box display="flex" alignItems="center" gap={1.5}>
+          <IconButton
+            size="small"
+            onClick={handleDrawerToggle}
+            sx={{ display: { lg: 'none' }, color: 'text.secondary' }}
+          >
+            <MenuIcon fontSize="small" />
+          </IconButton>
+
+          {companyName && (
+            <Box sx={{ display: { xs: 'none', sm: 'flex' }, alignItems: 'center', gap: 1 }}>
+              <Box sx={{ width: 3, height: 18, borderRadius: 2, bgcolor: qbGreen }} />
+              <Box>
+                <Typography sx={{ fontSize: '0.6rem', fontWeight: 800, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.08em', lineHeight: 1 }}>
                   Current Center
                 </Typography>
-                <Typography variant="subtitle2" fontWeight={700} color="primary.main" sx={{ lineHeight: 1.2 }}>
+                <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, color: qbGreen, lineHeight: 1.3 }}>
                   {companyName}
                 </Typography>
               </Box>
-            )}
-          </Box>
+            </Box>
+          )}
+        </Box>
 
-          <Box display="flex" alignItems="center" gap={1.5}>
-              <IconButton 
-                size="small" 
-                sx={{ 
-                  bgcolor: alpha(theme.palette.primary.main, 0.04),
-                  '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.08) }
-                }}
-              >
-                <SearchIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} />
-              </IconButton>
-              
-              <IconButton 
+        {/* Right: icons + user */}
+        <Box display="flex" alignItems="center" gap={1}>
+          <IconButton size="small" sx={{ color: '#9CA3AF', '&:hover': { color: qbGreen, bgcolor: alpha(qbGreen, 0.06) }, borderRadius: '8px' }}>
+            <SearchIcon sx={{ fontSize: '1.05rem' }} />
+          </IconButton>
+          <IconButton size="small" sx={{ color: '#9CA3AF', '&:hover': { color: qbGreen, bgcolor: alpha(qbGreen, 0.06) }, borderRadius: '8px' }}>
+            <NotificationsNoneIcon sx={{ fontSize: '1.05rem' }} />
+          </IconButton>
+
+          <Box sx={{ width: '1px', height: 24, bgcolor: '#E5E7EB', mx: 0.5, display: { xs: 'none', md: 'block' } }} />
+
+          <Box display="flex" alignItems="center" gap={1.25}>
+            <Box sx={{ textAlign: 'right', display: { xs: 'none', md: 'block' } }}>
+              <Typography sx={{ fontSize: '0.8rem', fontWeight: 700, color: '#3D3D3D', lineHeight: 1.2 }}>
+                {authData?.name || 'User'}
+              </Typography>
+              <Chip
+                label={getRoleLabel(authData?.role)}
                 size="small"
-                sx={{ 
-                  bgcolor: alpha(theme.palette.primary.main, 0.04),
-                  '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.08) }
-                }}
-              >
-                <NotificationsNoneIcon sx={{ fontSize: '1.1rem', color: 'text.secondary' }} />
-              </IconButton>
-
-              <Box sx={{ height: 32, width: '1px', bgcolor: 'divider', mx: 0.5, display: { xs: 'none', md: 'block' } }} />
-
-              <Box display="flex" alignItems="center" gap={1.5}>
-                  <Box sx={{ textAlign: 'right', display: { xs: 'none', md: 'block' } }}>
-                      <Typography variant="subtitle2" fontWeight={700} lineHeight={1.2} sx={{ mb: 0.25 }}>
-                          {authData?.name || 'User'}
-                      </Typography>
-                      <Chip 
-                        label={getRoleLabel(authData?.role)} 
-                        size="small" 
-                        color={getRoleColor(authData?.role)}
-                        sx={{ height: 18, fontSize: '0.65rem', fontWeight: 700 }}
-                      />
-                  </Box>
-                  <Avatar sx={{ 
-                    bgcolor: theme.palette.primary.main, 
-                    width: 40, 
-                    height: 40, 
-                    fontSize: '0.9rem', 
-                    fontWeight: 700,
-                    boxShadow: '0 2px 8px rgba(30, 64, 175, 0.2)',
-                    border: '2px solid',
-                    borderColor: 'background.paper'
-                  }}>
-                      {getInitials(authData?.name)}
-                  </Avatar>
-              </Box>
+                color={getRoleColor(authData?.role)}
+                sx={{ height: 16, fontSize: '0.6rem', fontWeight: 700, mt: 0.25 }}
+              />
+            </Box>
+            <Avatar sx={{
+              bgcolor: qbGreen,
+              width: 34, height: 34,
+              fontSize: '0.8rem', fontWeight: 800,
+              boxShadow: '0 2px 6px rgba(44,160,28,0.3)',
+              border: '2px solid #fff',
+            }}>
+              {getInitials(authData?.name)}
+            </Avatar>
           </Box>
-        </Toolbar>
+        </Box>
+      </Toolbar>
     </AppBar>
   );
 });

@@ -91,7 +91,7 @@ const Dashboard = () => {
         component="main"
         sx={{ flexGrow: 1, p: { xs: 2, md: 2 }, width: { sm: `calc(100% - ${drawerWidth}px)` }, minHeight: '100vh' }}
       >
-        <Toolbar sx={{ minHeight: 64 }} />
+        <Toolbar sx={{ minHeight: 56 }} />
         <Suspense fallback={<LoadingFallback />}>
           <Routes>
             <Route path="dashboard" element={<DashboardOverview />} />
