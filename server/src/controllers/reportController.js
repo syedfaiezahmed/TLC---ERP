@@ -1121,10 +1121,12 @@ const getTeacherStatement = async (req, res) => {
             openingBalance = priorUnpaid.reduce((s, p) => s + (p.netSalary || 0), 0);
         }
 
+        // Only committed payrolls (approved or paid) appear in the statement.
+        // Draft payrolls are preliminary calculations — not posted obligations.
         const payrolls = await Payroll.find({
             company: companyObj,
             teacher: teacherObj,
-            status: { $ne: 'cancelled' },
+            status: { $in: ['approved', 'paid'] },
             ...(Object.keys(monthFilter).length ? { month: monthFilter } : {}),
         }).sort({ month: 1, createdAt: 1 }).lean();
 
