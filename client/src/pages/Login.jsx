@@ -31,10 +31,11 @@ const Login = () => {
 
   useEffect(() => {
     if (authData) {
-      if (authData.company) {
+      if (authData.role === 'scanner') {
+        navigate(`/scanner/${authData.company}`);
+      } else if (authData.company) {
         navigate(`/company/${authData.company}/dashboard`);
       } else {
-        // Fallback for unexpected state, though company should be linked by seeder
         navigate('/login');
       }
     }
