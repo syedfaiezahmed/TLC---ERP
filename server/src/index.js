@@ -57,6 +57,7 @@ import feeReportRoutes from './routes/feeReportRoutes.js';
 import pdfVoucherRoutes from './routes/pdfVoucherRoutes.js';
 import assetRoutes from './routes/assetRoutes.js';
 import teacherClassLogRoutes from './routes/teacherClassLogRoutes.js';
+import qrAttendanceRoutes from './routes/qrAttendanceRoutes.js';
 import { scheduleBackups } from './controllers/backupController.js';
 
 
@@ -157,6 +158,7 @@ const routes = [
   { path: '/payroll', handler: payrollRoutes },
   { path: '/assets', handler: assetRoutes },
   { path: '/class-logs', handler: teacherClassLogRoutes },
+  { path: '/qr-attendance', handler: qrAttendanceRoutes },
 ];
 
 routes.forEach(route => {

@@ -279,3 +279,18 @@ export const deleteAsset = (id) => API.delete(`/assets/${id}`);
 export const fetchDepreciationHistory = (assetId) => API.get(`/assets/${assetId}/depreciation-history`);
 export const postDepreciationForMonth = (companyId, month) =>
     API.post(`/assets/company/${companyId}/post-depreciation${month ? `?month=${month}` : ''}`);
+
+// ── QR Attendance ─────────────────────────────────────────────────────────────
+export const fetchQRUsers = (companyId, userType) =>
+  API.get(`/qr-attendance/users/${companyId}`, { params: { userType } });
+export const generateUserQR = (userType, userId, companyId) =>
+  API.get(`/qr-attendance/generate/${userType}/${userId}`, { params: { companyId } });
+export const processQRScan = (payload) => API.post('/qr-attendance/scan', payload);
+export const fetchTodayScans = (companyId) => API.get(`/qr-attendance/today/${companyId}`);
+export const fetchScanHistory = (companyId, params) =>
+  API.get(`/qr-attendance/history/${companyId}`, { params });
+export const fetchQRDailySummary = (companyId, date) =>
+  API.get(`/qr-attendance/summary/${companyId}`, { params: { date } });
+export const fetchQRSettings = (companyId) => API.get(`/qr-attendance/settings/${companyId}`);
+export const updateQRSettings = (companyId, data) => API.put(`/qr-attendance/settings/${companyId}`, data);
+export const deleteQRScan = (id) => API.delete(`/qr-attendance/scan/${id}`);

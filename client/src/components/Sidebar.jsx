@@ -51,6 +51,7 @@ import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import GroupsIcon from '@mui/icons-material/Groups';
 import LayersIcon from '@mui/icons-material/Layers';
+import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
 
 const Sidebar = React.memo(({ mobileOpen, handleDrawerToggle }) => {
   const { companyId } = useParams();
@@ -88,6 +89,7 @@ const Sidebar = React.memo(({ mobileOpen, handleDrawerToggle }) => {
         { text: 'Courses', icon: <AutoStoriesIcon />, path: `/company/${companyId}/courses`, roles: ['superadmin', 'admin', 'teacher'] },
         { text: 'Batches', icon: <GroupsIcon />, path: `/company/${companyId}/batches`, roles: ['superadmin', 'admin', 'teacher'] },
         { text: 'Attendance', icon: <EventAvailableIcon />, path: `/company/${companyId}/attendance`, roles: ['superadmin', 'admin', 'teacher'] },
+        { text: 'QR Attendance', icon: <QrCodeScannerIcon />, path: `/company/${companyId}/qr-attendance`, roles: ['superadmin', 'admin', 'teacher'] },
         { text: 'Exams & Results', icon: <AssignmentIcon />, path: `/company/${companyId}/exams`, roles: ['superadmin', 'admin', 'teacher'] },
       );
     }

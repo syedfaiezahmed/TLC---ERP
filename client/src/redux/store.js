@@ -24,6 +24,7 @@ import enrollmentReducer from './enrollmentSlice';
 import assetReducer from './assetSlice';
 import payrollReducer from './payrollSlice';
 import groupReducer from './groupSlice';
+import qrAttendanceReducer from './qrAttendanceSlice';
 
 export const store = configureStore({
   reducer: {
@@ -52,5 +53,6 @@ export const store = configureStore({
     assets: assetReducer,
     payroll: payrollReducer,
     groups: groupReducer,
+    qrAttendance: qrAttendanceReducer,
   },
 });

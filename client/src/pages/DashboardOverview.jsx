@@ -13,8 +13,9 @@ import PaymentsIcon        from '@mui/icons-material/Payments';
 import AccountBalanceIcon  from '@mui/icons-material/AccountBalance';
 import InventoryIcon       from '@mui/icons-material/Inventory';
 import SchoolIcon          from '@mui/icons-material/School';
-import CalendarMonthIcon   from '@mui/icons-material/CalendarMonth';
-import BarChartIcon        from '@mui/icons-material/BarChart';
+import CalendarMonthIcon     from '@mui/icons-material/CalendarMonth';
+import BarChartIcon          from '@mui/icons-material/BarChart';
+import QrCodeScannerIcon     from '@mui/icons-material/QrCodeScanner';
 
 // ─── QuickBooks colour tokens ─────────────────────────────────────────────────
 const QB = {
@@ -97,11 +98,18 @@ const DashboardOverview = () => {
                 path: 'fees',
             },
         ] : []),
-        ...((userRole === 'teacher' || isAdmin) ? [{
-            icon: <EventAvailableIcon />, iconColor: QB.purple,
-            label: 'Mark Attendance', desc: "Record today's attendance",
-            path: 'attendance',
-        }] : []),
+        ...((userRole === 'teacher' || isAdmin) ? [
+            {
+                icon: <EventAvailableIcon />, iconColor: QB.purple,
+                label: 'Mark Attendance', desc: "Manual batch attendance",
+                path: 'attendance',
+            },
+            {
+                icon: <QrCodeScannerIcon />, iconColor: QB.green,
+                label: 'QR Attendance', desc: "Webcam QR card scanner",
+                path: 'qr-attendance',
+            },
+        ] : []),
         ...(isAdmin ? [
             {
                 icon: <SchoolIcon />, iconColor: QB.amber,

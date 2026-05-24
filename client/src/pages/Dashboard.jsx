@@ -42,6 +42,7 @@ const Exams = lazy(() => import('./Exams'));
 const Enquiries = lazy(() => import('./Enquiries'));
 const FeeManagement = lazy(() => import('./FeeManagement'));
 const EnrollmentManagement = lazy(() => import('./EnrollmentManagement'));
+const QRAttendance = lazy(() => import('./QRAttendance/index'));
 
 const LoadingFallback = () => (
   <Box display="flex" justifyContent="center" alignItems="center" height="200px">
@@ -101,6 +102,7 @@ const Dashboard = () => {
             <Route path="groups" element={<Groups />} />
             <Route path="batches" element={<Batches />} />
             <Route path="attendance" element={<Attendance />} />
+            <Route path="qr-attendance" element={<QRAttendance />} />
             <Route path="exams" element={<Exams />} />
             <Route path="fees" element={<Fees />} />
             <Route path="fee-management" element={<FeeManagement />} />
