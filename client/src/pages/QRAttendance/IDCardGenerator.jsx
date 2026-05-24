@@ -2,13 +2,13 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   Box, Typography, Grid, Card, CardContent, Button, TextField,
   InputAdornment, Chip, CircularProgress, alpha, ToggleButton,
-  ToggleButtonGroup, Tooltip
+  ToggleButtonGroup,
 } from '@mui/material';
-import SearchIcon from '@mui/icons-material/Search';
-import DownloadIcon from '@mui/icons-material/Download';
-import QrCodeIcon from '@mui/icons-material/QrCode';
-import BadgeIcon from '@mui/icons-material/Badge';
-import PrintIcon from '@mui/icons-material/Print';
+import SearchIcon    from '@mui/icons-material/Search';
+import DownloadIcon  from '@mui/icons-material/Download';
+import QrCodeIcon    from '@mui/icons-material/QrCode';
+import BadgeIcon     from '@mui/icons-material/Badge';
+import PrintIcon     from '@mui/icons-material/Print';
 import { useDispatch, useSelector } from 'react-redux';
 import { generateQR, loadQRUsers } from '../../redux/qrAttendanceSlice';
 import { useParams } from 'react-router-dom';
@@ -16,137 +16,310 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
 const QB_GREEN = '#2CA01C';
-const CARD_BG  = '#1C2B36';
 
-// ── Single ID card (rendered to DOM for PDF capture) ────────────────────────
-const IDCard = React.forwardRef(({ user, userType, companyName }, ref) => {
-  const initials   = user.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
-  const roleColor  = userType === 'Student' ? QB_GREEN : '#0077C5';
-  const roleDark   = userType === 'Student' ? '#1A6010' : '#004F83';
-  const infoText   = user.group?.name || user.specialization || '';
-  const idText     = user.studentId || user.contact || '';
+// ── Per-role colour palettes ──────────────────────────────────────────────────
+const THEMES = {
+  Student: {
+    primary:   '#0057B7',
+    dark:      '#003D82',
+    accent:    '#F97316',
+    accentBg:  '#FFF3E9',
+    gradient:  'linear-gradient(135deg,#0057B7 0%,#003D82 100%)',
+    footerBg:  '#002A5C',
+  },
+  Teacher: {
+    primary:   '#F97316',
+    dark:      '#C2580A',
+    accent:    '#0057B7',
+    accentBg:  '#E9F3FF',
+    gradient:  'linear-gradient(135deg,#F97316 0%,#C2580A 100%)',
+    footerBg:  '#8B3D04',
+  },
+};
+
+// Card physical size in px (portrait CR80: 54mm × 85.6mm @ 96dpi)
+const CW = 210; // ~54mm
+const CH = 333; // ~85.6mm
+
+const LOGO = '/logo.png';
+
+// ── FRONT of ID card ─────────────────────────────────────────────────────────
+const IDCardFront = React.forwardRef(({ user, userType, companyName }, ref) => {
+  const t        = THEMES[userType] || THEMES.Student;
+  const initials = user.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
+  const infoText = user.group?.name || user.specialization || '';
+  const idText   = user.studentId   || user.contact        || '';
+  const year     = new Date().getFullYear();
 
   return (
-    <Box
-      ref={ref}
-      sx={{
-        width: 340, height: 215,
-        bgcolor: '#FFFFFF',
-        borderRadius: '10px',
-        overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
-        fontFamily: '"Inter","Roboto",sans-serif',
-        boxShadow: '0 6px 32px rgba(0,0,0,0.15)',
-        border: `1px solid #E5E7EB`,
-        flexShrink: 0,
-      }}
-    >
-      {/* ── Header bar ──────────────────────────────────────────────── */}
-      <Box sx={{
-        bgcolor: roleColor, px: 1.5, py: 0.7, flexShrink: 0,
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      }}>
-        <Typography sx={{ fontSize: '0.72rem', fontWeight: 800, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-          {companyName || 'The Learning Centre'}
-        </Typography>
-        <Box sx={{ px: 0.75, py: 0.2, borderRadius: 8, bgcolor: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.4)' }}>
-          <Typography sx={{ fontSize: '0.58rem', fontWeight: 800, color: '#fff', letterSpacing: '0.06em' }}>
-            {userType.toUpperCase()}
+    <Box ref={ref} sx={{
+      width: CW, height: CH,
+      bgcolor: '#FFFFFF',
+      borderRadius: '12px',
+      overflow: 'hidden',
+      display: 'flex',
+      flexDirection: 'column',
+      fontFamily: '"Inter","Roboto",sans-serif',
+      boxShadow: '0 8px 40px rgba(0,0,0,0.18)',
+      flexShrink: 0,
+      position: 'relative',
+    }}>
+      {/* ── Header gradient ─────────────────────────────────────────── */}
+      <Box sx={{ background: t.gradient, px: 1.5, pt: 1.25, pb: 1, flexShrink: 0 }}>
+        {/* Logo + institute */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
+          <Box sx={{
+            width: 26, height: 26, borderRadius: '6px',
+            bgcolor: 'rgba(255,255,255,0.2)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            overflow: 'hidden', flexShrink: 0,
+          }}>
+            <img src={LOGO} alt="logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} crossOrigin="anonymous" />
+          </Box>
+          <Box>
+            <Typography sx={{ fontSize: '0.72rem', fontWeight: 900, color: '#fff', lineHeight: 1, letterSpacing: '0.02em' }}>
+              {companyName || 'The Learning Centre'}
+            </Typography>
+            <Typography sx={{ fontSize: '0.48rem', color: 'rgba(255,255,255,0.75)', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+              Smart Attendance System
+            </Typography>
+          </Box>
+        </Box>
+        {/* Role tag */}
+        <Box sx={{
+          display: 'inline-flex', alignItems: 'center',
+          bgcolor: 'rgba(255,255,255,0.18)',
+          border: '1px solid rgba(255,255,255,0.35)',
+          borderRadius: '4px',
+          px: 0.75, py: 0.15,
+        }}>
+          <Typography sx={{ fontSize: '0.52rem', fontWeight: 900, color: '#fff', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+            {userType} ID Card
           </Typography>
         </Box>
       </Box>
 
-      {/* ── Body ────────────────────────────────────────────────────── */}
-      <Box sx={{ display: 'flex', flex: 1, p: 1.25, gap: 1.25 }}>
-
-        {/* Left: photo */}
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
-          <Box sx={{
-            width: 72, height: 80, borderRadius: '6px',
-            border: `2px solid ${roleColor}`,
-            overflow: 'hidden',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            bgcolor: alpha(roleColor, 0.07),
-            flexShrink: 0,
-          }}>
-            {user.profileImage ? (
-              <img
-                src={user.profileImage}
-                alt={user.name}
-                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                crossOrigin="anonymous"
-              />
-            ) : (
-              <Typography sx={{ fontSize: '1.6rem', fontWeight: 900, color: roleColor, lineHeight: 1 }}>
+      {/* ── Photo ───────────────────────────────────────────────────── */}
+      <Box sx={{ display: 'flex', justifyContent: 'center', mt: 1.5, mb: 1, flexShrink: 0 }}>
+        <Box sx={{
+          width: 74, height: 88,
+          borderRadius: '8px',
+          border: `3px solid ${t.primary}`,
+          boxShadow: `0 4px 16px ${alpha(t.primary, 0.35)}`,
+          overflow: 'hidden',
+          bgcolor: alpha(t.primary, 0.06),
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          position: 'relative',
+        }}>
+          {user.profileImage ? (
+            <img src={user.profileImage} alt={user.name}
+              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+              crossOrigin="anonymous" />
+          ) : (
+            <>
+              {/* Decorative circles behind initials */}
+              <Box sx={{ position: 'absolute', width: 60, height: 60, borderRadius: '50%', bgcolor: alpha(t.primary, 0.06), top: '50%', left: '50%', transform: 'translate(-50%,-50%)' }} />
+              <Typography sx={{ fontSize: '2rem', fontWeight: 900, color: t.primary, lineHeight: 1, zIndex: 1 }}>
                 {initials}
               </Typography>
-            )}
-          </Box>
-          {idText && (
-            <Typography sx={{ fontSize: '0.52rem', color: '#9CA3AF', fontWeight: 700, textAlign: 'center', lineHeight: 1.2, maxWidth: 72 }} noWrap>
-              {idText}
-            </Typography>
-          )}
-        </Box>
-
-        {/* Middle: name + info */}
-        <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 0.4 }}>
-          <Typography sx={{ fontSize: '1rem', fontWeight: 900, color: '#111827', lineHeight: 1.15, wordBreak: 'break-word' }}>
-            {user.name}
-          </Typography>
-          {infoText && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4 }}>
-              <Box sx={{ width: 3, height: 10, borderRadius: 2, bgcolor: roleColor, flexShrink: 0 }} />
-              <Typography sx={{ fontSize: '0.65rem', color: roleColor, fontWeight: 700 }} noWrap>
-                {infoText}
-              </Typography>
-            </Box>
-          )}
-          <Box sx={{ mt: 0.5, height: 1, bgcolor: '#F3F4F6' }} />
-          <Typography sx={{ fontSize: '0.58rem', color: '#9CA3AF', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-            Attendance ID Card
-          </Typography>
-        </Box>
-
-        {/* Right: QR code */}
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 0.4, flexShrink: 0 }}>
-          {user.qrDataUrl ? (
-            <>
-              <Box sx={{ p: 0.5, bgcolor: '#fff', borderRadius: '5px', border: `1.5px solid ${roleColor}`, lineHeight: 0 }}>
-                <img src={user.qrDataUrl} alt="QR" width={76} height={76} style={{ display: 'block' }} />
-              </Box>
-              <Typography sx={{ fontSize: '0.5rem', color: '#9CA3AF', fontWeight: 600, letterSpacing: '0.04em' }}>
-                SCAN TO MARK
-              </Typography>
             </>
-          ) : (
-            <Box sx={{
-              width: 76, height: 76, borderRadius: '5px',
-              bgcolor: '#F9FAFB', border: '1.5px dashed #D1D5DB',
-              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 0.5,
-            }}>
-              <QrCodeIcon sx={{ fontSize: 28, color: '#D1D5DB' }} />
-              <Typography sx={{ fontSize: '0.48rem', color: '#D1D5DB', textAlign: 'center', px: 0.5 }}>
-                Generate QR
-              </Typography>
-            </Box>
           )}
+          {/* Accent corner */}
+          <Box sx={{ position: 'absolute', bottom: 0, right: 0, width: 18, height: 18,
+            background: t.accent, borderTopLeftRadius: '6px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: '#fff' }} />
+          </Box>
         </Box>
+      </Box>
+
+      {/* ── Name & info ─────────────────────────────────────────────── */}
+      <Box sx={{ px: 1.5, mb: 0.75, textAlign: 'center', flexShrink: 0 }}>
+        <Typography sx={{
+          fontSize: '0.9rem', fontWeight: 900, color: '#111827',
+          lineHeight: 1.2, letterSpacing: '-0.01em',
+        }}>
+          {user.name}
+        </Typography>
+
+        {infoText && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 0.5, mt: 0.4 }}>
+            <Box sx={{ width: 14, height: 2, borderRadius: 1, bgcolor: t.accent }} />
+            <Typography sx={{ fontSize: '0.62rem', fontWeight: 700, color: t.primary }}>
+              {infoText}
+            </Typography>
+            <Box sx={{ width: 14, height: 2, borderRadius: 1, bgcolor: t.accent }} />
+          </Box>
+        )}
+
+        {idText && (
+          <Typography sx={{ fontSize: '0.58rem', color: '#9CA3AF', fontWeight: 600, mt: 0.25, letterSpacing: '0.03em' }}>
+            ID: {idText}
+          </Typography>
+        )}
+      </Box>
+
+      {/* ── Divider with dots ───────────────────────────────────────── */}
+      <Box sx={{ display: 'flex', alignItems: 'center', px: 1.5, mb: 0.75, flexShrink: 0 }}>
+        <Box sx={{ flex: 1, height: 1, bgcolor: '#F0F0F0' }} />
+        <Box sx={{ mx: 0.5, width: 4, height: 4, borderRadius: '50%', bgcolor: t.accent }} />
+        <Box sx={{ mx: 0.25, width: 3, height: 3, borderRadius: '50%', bgcolor: alpha(t.accent, 0.5) }} />
+        <Box sx={{ mx: 0.5, width: 4, height: 4, borderRadius: '50%', bgcolor: t.accent }} />
+        <Box sx={{ flex: 1, height: 1, bgcolor: '#F0F0F0' }} />
+      </Box>
+
+      {/* ── QR Code ─────────────────────────────────────────────────── */}
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 0.5, flexShrink: 0 }}>
+        {user.qrDataUrl ? (
+          <>
+            <Box sx={{
+              p: 0.6, bgcolor: '#fff', borderRadius: '8px',
+              border: `2px solid ${t.primary}`,
+              boxShadow: `0 2px 12px ${alpha(t.primary, 0.2)}`,
+              lineHeight: 0,
+            }}>
+              <img src={user.qrDataUrl} alt="QR" width={82} height={82} style={{ display: 'block' }} />
+            </Box>
+            <Typography sx={{
+              fontSize: '0.46rem', fontWeight: 800, mt: 0.4,
+              color: t.accent, letterSpacing: '0.12em', textTransform: 'uppercase',
+            }}>
+              ▶ Scan to Mark Attendance ◀
+            </Typography>
+          </>
+        ) : (
+          <Box sx={{
+            width: 82, height: 82, borderRadius: '8px',
+            bgcolor: '#F9FAFB', border: `2px dashed ${alpha(t.primary, 0.3)}`,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 0.4,
+          }}>
+            <QrCodeIcon sx={{ fontSize: 28, color: alpha(t.primary, 0.3) }} />
+            <Typography sx={{ fontSize: '0.44rem', color: alpha(t.primary, 0.4), fontWeight: 700 }}>
+              QR Not Generated
+            </Typography>
+          </Box>
+        )}
       </Box>
 
       {/* ── Footer ──────────────────────────────────────────────────── */}
-      <Box sx={{ bgcolor: roleDark, px: 1.5, py: 0.45, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
-        <Typography sx={{ fontSize: '0.52rem', color: 'rgba(255,255,255,0.7)', fontWeight: 600, letterSpacing: '0.06em' }}>
-          Smart QR Attendance System · {companyName || 'The Learning Centre'}
+      <Box sx={{
+        mt: 'auto', bgcolor: t.footerBg, px: 1.5, py: 0.55,
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0,
+      }}>
+        <Typography sx={{ fontSize: '0.5rem', color: 'rgba(255,255,255,0.8)', fontWeight: 700, letterSpacing: '0.04em' }}>
+          {userType.toUpperCase()}
+        </Typography>
+        <Box sx={{ width: 24, height: 1.5, borderRadius: 1, bgcolor: t.accent }} />
+        <Typography sx={{ fontSize: '0.5rem', color: 'rgba(255,255,255,0.6)', fontWeight: 600 }}>
+          {year}–{String(year + 1).slice(2)}
         </Typography>
       </Box>
     </Box>
   );
 });
-IDCard.displayName = 'IDCard';
+IDCardFront.displayName = 'IDCardFront';
+
+// ── BACK of ID card ──────────────────────────────────────────────────────────
+const IDCardBack = React.forwardRef(({ userType, companyName }, ref) => {
+  const t = THEMES[userType] || THEMES.Student;
+
+  const policies = [
+    'This card must be carried at all times within the institute premises.',
+    'Scan your card at entry to mark attendance — no manual entry is accepted.',
+    'This card is strictly non-transferable and non-shareable.',
+    'Report a lost or damaged card to the admin office immediately.',
+    'Misuse of this card may result in disciplinary action.',
+    'Replacement charge may apply for lost cards.',
+  ];
+
+  return (
+    <Box ref={ref} sx={{
+      width: CW, height: CH,
+      bgcolor: '#FFFFFF',
+      borderRadius: '12px',
+      overflow: 'hidden',
+      display: 'flex',
+      flexDirection: 'column',
+      fontFamily: '"Inter","Roboto",sans-serif',
+      boxShadow: '0 8px 40px rgba(0,0,0,0.18)',
+      flexShrink: 0,
+    }}>
+      {/* ── Back header (smaller) ────────────────────────────────────── */}
+      <Box sx={{ background: t.gradient, px: 1.5, py: 1, flexShrink: 0 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+          <Box sx={{
+            width: 22, height: 22, borderRadius: '5px',
+            bgcolor: 'rgba(255,255,255,0.2)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            overflow: 'hidden', flexShrink: 0,
+          }}>
+            <img src={LOGO} alt="logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} crossOrigin="anonymous" />
+          </Box>
+          <Typography sx={{ fontSize: '0.68rem', fontWeight: 900, color: '#fff', letterSpacing: '0.02em' }}>
+            {companyName || 'The Learning Centre'}
+          </Typography>
+        </Box>
+      </Box>
+
+      {/* ── Accent stripe ────────────────────────────────────────────── */}
+      <Box sx={{ height: 3, background: `linear-gradient(90deg,${t.accent},${t.primary})`, flexShrink: 0 }} />
+
+      {/* ── Policies ─────────────────────────────────────────────────── */}
+      <Box sx={{ px: 1.5, pt: 1.25, flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, mb: 1 }}>
+          <Box sx={{ width: 3, height: 14, borderRadius: 2, bgcolor: t.primary }} />
+          <Typography sx={{ fontSize: '0.62rem', fontWeight: 900, color: t.primary, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+            Card Policies & Guidelines
+          </Typography>
+        </Box>
+
+        {policies.map((p, i) => (
+          <Box key={i} sx={{ display: 'flex', gap: 0.6, mb: 0.6 }}>
+            <Box sx={{ width: 5, height: 5, borderRadius: '50%', bgcolor: t.accent, mt: '3px', flexShrink: 0 }} />
+            <Typography sx={{ fontSize: '0.54rem', color: '#374151', lineHeight: 1.45, fontWeight: 500 }}>
+              {p}
+            </Typography>
+          </Box>
+        ))}
+      </Box>
+
+      {/* ── Return info ──────────────────────────────────────────────── */}
+      <Box sx={{
+        mx: 1.5, mb: 1.25, borderRadius: '8px',
+        bgcolor: alpha(t.primary, 0.05),
+        border: `1px solid ${alpha(t.primary, 0.15)}`,
+        p: 1, flexShrink: 0,
+      }}>
+        <Typography sx={{ fontSize: '0.52rem', fontWeight: 800, color: t.primary, mb: 0.4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          If Found, Please Return To:
+        </Typography>
+        <Typography sx={{ fontSize: '0.58rem', fontWeight: 700, color: '#111827' }}>
+          {companyName || 'The Learning Centre'}
+        </Typography>
+        <Typography sx={{ fontSize: '0.52rem', color: '#6B7280', mt: 0.15 }}>
+          Admin Office · Smart QR Attendance System
+        </Typography>
+      </Box>
+
+      {/* ── Footer ───────────────────────────────────────────────────── */}
+      <Box sx={{
+        bgcolor: t.footerBg, px: 1.5, py: 0.55,
+        display: 'flex', justifyContent: 'center', alignItems: 'center', flexShrink: 0,
+      }}>
+        <Typography sx={{ fontSize: '0.48rem', color: 'rgba(255,255,255,0.7)', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+          Authorised Attendance Card · Not For Resale
+        </Typography>
+      </Box>
+    </Box>
+  );
+});
+IDCardBack.displayName = 'IDCardBack';
 
 // ── Main component ───────────────────────────────────────────────────────────
+// Portrait CR80: 54mm × 85.6mm
+const PDF_W = 54, PDF_H = 85.6;
+
 const IDCardGenerator = ({ companyName }) => {
   const dispatch   = useDispatch();
   const { companyId } = useParams();
@@ -156,9 +329,12 @@ const IDCardGenerator = ({ companyName }) => {
   const [search,      setSearch]      = useState('');
   const [generating,  setGenerating]  = useState({});
   const [downloading, setDownloading] = useState({});
-  const cardRefs = useRef({});
 
-  // Reload whenever userType or companyId changes
+  const frontRefs = useRef({});
+  const backRefs  = useRef({});
+
+  const t = THEMES[userType] || THEMES.Student;
+
   useEffect(() => {
     setSearch('');
     dispatch(loadQRUsers({ companyId, userType }));
@@ -176,16 +352,28 @@ const IDCardGenerator = ({ companyName }) => {
     setGenerating(g => ({ ...g, [user._id]: false }));
   }, [dispatch, userType, companyId]);
 
+  // Download = 2-page PDF: page 1 = front, page 2 = back
   const handleDownload = useCallback(async (user) => {
     if (!user.qrDataUrl) return;
     setDownloading(d => ({ ...d, [user._id]: true }));
     try {
-      const cardEl = cardRefs.current[user._id];
-      if (!cardEl) return;
-      const canvas = await html2canvas(cardEl, { scale: 3, useCORS: true, logging: false });
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [85.6, 54] });
-      pdf.addImage(imgData, 'PNG', 0, 0, 85.6, 54);
+      const frontEl = frontRefs.current[user._id];
+      const backEl  = backRefs.current[user._id];
+      if (!frontEl) return;
+
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [PDF_W, PDF_H] });
+
+      // Page 1: Front
+      const frontCanvas = await html2canvas(frontEl, { scale: 4, useCORS: true, logging: false, backgroundColor: '#ffffff' });
+      pdf.addImage(frontCanvas.toDataURL('image/png'), 'PNG', 0, 0, PDF_W, PDF_H);
+
+      // Page 2: Back
+      if (backEl) {
+        const backCanvas = await html2canvas(backEl, { scale: 4, useCORS: true, logging: false, backgroundColor: '#ffffff' });
+        pdf.addPage();
+        pdf.addImage(backCanvas.toDataURL('image/png'), 'PNG', 0, 0, PDF_W, PDF_H);
+      }
+
       pdf.save(`ID_Card_${user.name.replace(/\s+/g, '_')}.pdf`);
     } catch (err) {
       console.error('PDF gen error:', err);
@@ -194,30 +382,52 @@ const IDCardGenerator = ({ companyName }) => {
     }
   }, []);
 
+  // Print All: fronts on first set of A4 pages, backs on next set
   const handlePrintAll = useCallback(async () => {
     const printable = filtered.filter(u => u.qrDataUrl);
     if (!printable.length) return;
 
-    const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-    const cardsPerRow = 3;
-    const cardW = 85.6, cardH = 54;
-    const marginX = 5, marginY = 5, gapX = 5, gapY = 5;
+    // Portrait A4: 210 × 297 mm, 3 cards per row, 3 per col = 9 per page
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const cpr = 3, cpc = 3, perPage = cpr * cpc;
+    const marginX = 6, marginY = 6, gapX = 4, gapY = 4;
+    const cardW = (210 - marginX * 2 - gapX * (cpr - 1)) / cpr;  // ~62mm
+    const cardH = cardW * (PDF_H / PDF_W);                         // maintain ratio
 
+    let isFirst = true;
+
+    // ── All fronts ──
     for (let i = 0; i < printable.length; i++) {
-      const user = printable[i];
-      const cardEl = cardRefs.current[user._id];
-      if (!cardEl) continue;
-      const canvas = await html2canvas(cardEl, { scale: 3, useCORS: true, logging: false });
-      const imgData = canvas.toDataURL('image/png');
-      const row = Math.floor(i / cardsPerRow);
-      const col = i % cardsPerRow;
+      const user  = printable[i];
+      const el    = frontRefs.current[user._id];
+      if (!el) continue;
+      const row = Math.floor((i % perPage) / cpr);
+      const col = i % cpr;
+      if (i > 0 && i % perPage === 0) pdf.addPage();
+      const canvas = await html2canvas(el, { scale: 3, useCORS: true, logging: false, backgroundColor: '#ffffff' });
       const x = marginX + col * (cardW + gapX);
       const y = marginY + row * (cardH + gapY);
-      if (i > 0 && col === 0 && row > 0) pdf.addPage();
-      pdf.addImage(imgData, 'PNG', x, y, cardW, cardH);
+      if (isFirst) isFirst = false;
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', x, y, cardW, cardH);
     }
-    pdf.save('ID_Cards_All.pdf');
-  }, [filtered]);
+
+    // ── All backs (new page section) ──
+    pdf.addPage();
+    for (let i = 0; i < printable.length; i++) {
+      const user = printable[i];
+      const el   = backRefs.current[user._id];
+      if (!el) continue;
+      const row = Math.floor((i % perPage) / cpr);
+      const col = i % cpr;
+      if (i > 0 && i % perPage === 0) pdf.addPage();
+      const canvas = await html2canvas(el, { scale: 3, useCORS: true, logging: false, backgroundColor: '#ffffff' });
+      const x = marginX + col * (cardW + gapX);
+      const y = marginY + row * (cardH + gapY);
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', x, y, cardW, cardH);
+    }
+
+    pdf.save(`ID_Cards_All_${userType}.pdf`);
+  }, [filtered, userType]);
 
   return (
     <Box>
@@ -228,7 +438,10 @@ const IDCardGenerator = ({ companyName }) => {
           exclusive
           onChange={(_, v) => { if (v) setUserType(v); }}
           size="small"
-          sx={{ '& .MuiToggleButton-root': { px: 2, fontWeight: 700 } }}
+          sx={{
+            '& .MuiToggleButton-root': { px: 2.5, fontWeight: 700 },
+            '& .Mui-selected': { bgcolor: `${t.primary} !important`, color: '#fff !important' },
+          }}
         >
           <ToggleButton value="Student">Students</ToggleButton>
           <ToggleButton value="Teacher">Teachers</ToggleButton>
@@ -247,74 +460,85 @@ const IDCardGenerator = ({ companyName }) => {
           variant="outlined"
           startIcon={<PrintIcon />}
           onClick={handlePrintAll}
-          sx={{ fontWeight: 700, borderColor: QB_GREEN, color: QB_GREEN, '&:hover': { bgcolor: alpha(QB_GREEN, 0.06), borderColor: QB_GREEN } }}
+          sx={{ fontWeight: 700, borderColor: t.primary, color: t.primary, '&:hover': { bgcolor: alpha(t.primary, 0.06), borderColor: t.primary } }}
         >
-          Print All with QR
+          Print All (Front + Back)
         </Button>
       </Box>
 
       {/* ── Info banner ─────────────────────────────────────────────────── */}
-      <Box sx={{ p: 1.5, mb: 2.5, borderRadius: 2, bgcolor: alpha(QB_GREEN, 0.06), border: `1px solid ${alpha(QB_GREEN, 0.2)}` }}>
+      <Box sx={{ p: 1.5, mb: 2.5, borderRadius: 2, bgcolor: alpha(t.primary, 0.05), border: `1px solid ${alpha(t.primary, 0.18)}` }}>
         <Typography variant="body2" sx={{ color: '#3D3D3D' }}>
-          <strong>{filtered.filter(u => u.hasQR).length}</strong> of <strong>{filtered.length}</strong> {userType.toLowerCase()}s have QR generated.
-          Click <strong>Generate QR</strong> on any card, then <strong>Download</strong> or <strong>Print All</strong>.
+          <strong>{filtered.filter(u => u.hasQR).length}</strong> / <strong>{filtered.length}</strong> {userType.toLowerCase()}s have QR generated.
+          Download = 2-page PDF (Front + Back). Print All = full A4 sheet.
         </Typography>
       </Box>
 
       {/* ── Cards grid ──────────────────────────────────────────────────── */}
       {loadingUsers ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-          <CircularProgress sx={{ color: QB_GREEN }} />
+          <CircularProgress sx={{ color: t.primary }} />
         </Box>
       ) : (
         <Grid container spacing={3}>
           {filtered.map(user => (
-            <Grid item xs={12} sm={6} md={4} key={user._id}>
-              <Card sx={{ border: '1px solid #E5E7EB', boxShadow: 'none', borderRadius: 2 }}>
-                <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
-                  {/* ID card preview */}
-                  <Box sx={{ mb: 2, display: 'flex', justifyContent: 'center' }}>
-                    <IDCard
-                      ref={el => { cardRefs.current[user._id] = el; }}
-                      user={user}
-                      userType={userType}
-                      companyName={companyName}
-                    />
+            <Grid item xs={12} sm={6} md={4} lg={3} key={user._id}>
+              <Card sx={{ border: `1px solid ${alpha(t.primary, 0.15)}`, boxShadow: 'none', borderRadius: 3 }}>
+                <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+
+                  {/* Front + Back preview side-by-side, scaled to fit */}
+                  <Box sx={{ mb: 1.5, display: 'flex', justifyContent: 'center', gap: 1.5, overflow: 'hidden' }}>
+                    {/* Front — scaled 0.55 */}
+                    <Box sx={{ transform: 'scale(0.55)', transformOrigin: 'top left', width: CW * 0.55, height: CH * 0.55, flexShrink: 0 }}>
+                      <IDCardFront
+                        ref={el => { frontRefs.current[user._id] = el; }}
+                        user={user}
+                        userType={userType}
+                        companyName={companyName}
+                      />
+                    </Box>
+                    {/* Back — scaled 0.55 */}
+                    <Box sx={{ transform: 'scale(0.55)', transformOrigin: 'top left', width: CW * 0.55, height: CH * 0.55, flexShrink: 0 }}>
+                      <IDCardBack
+                        ref={el => { backRefs.current[user._id] = el; }}
+                        userType={userType}
+                        companyName={companyName}
+                      />
+                    </Box>
+                  </Box>
+
+                  {/* Labels */}
+                  <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, mb: 1.5 }}>
+                    <Typography sx={{ fontSize: '0.65rem', color: '#9CA3AF', fontWeight: 600 }}>FRONT</Typography>
+                    <Typography sx={{ fontSize: '0.65rem', color: '#9CA3AF', fontWeight: 600 }}>BACK</Typography>
                   </Box>
 
                   {/* Actions */}
                   <Box sx={{ display: 'flex', gap: 1 }}>
                     {!user.hasQR ? (
-                      <Button
-                        fullWidth
-                        variant="contained"
-                        size="small"
+                      <Button fullWidth variant="contained" size="small"
                         startIcon={generating[user._id] ? <CircularProgress size={14} color="inherit" /> : <QrCodeIcon />}
                         onClick={() => handleGenerate(user)}
                         disabled={generating[user._id]}
-                        sx={{ bgcolor: QB_GREEN, '&:hover': { bgcolor: '#238A15' }, fontWeight: 700, borderRadius: 1.5 }}
+                        sx={{ bgcolor: t.primary, '&:hover': { bgcolor: t.dark }, fontWeight: 700, borderRadius: 1.5 }}
                       >
                         {generating[user._id] ? 'Generating…' : 'Generate QR'}
                       </Button>
                     ) : (
                       <>
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          startIcon={generating[user._id] ? <CircularProgress size={14} /> : <QrCodeIcon />}
+                        <Button variant="outlined" size="small"
+                          startIcon={generating[user._id] ? <CircularProgress size={13} /> : <QrCodeIcon />}
                           onClick={() => handleGenerate(user)}
                           disabled={generating[user._id]}
-                          sx={{ flex: 1, fontWeight: 600, borderRadius: 1.5, fontSize: '0.75rem' }}
+                          sx={{ flex: 1, fontWeight: 600, borderRadius: 1.5, fontSize: '0.72rem', borderColor: t.primary, color: t.primary }}
                         >
-                          Regenerate
+                          Refresh QR
                         </Button>
-                        <Button
-                          variant="contained"
-                          size="small"
-                          startIcon={downloading[user._id] ? <CircularProgress size={14} color="inherit" /> : <DownloadIcon />}
+                        <Button variant="contained" size="small"
+                          startIcon={downloading[user._id] ? <CircularProgress size={13} color="inherit" /> : <DownloadIcon />}
                           onClick={() => handleDownload(user)}
                           disabled={downloading[user._id]}
-                          sx={{ flex: 1, bgcolor: QB_GREEN, '&:hover': { bgcolor: '#238A15' }, fontWeight: 700, borderRadius: 1.5, fontSize: '0.75rem' }}
+                          sx={{ flex: 1, bgcolor: t.primary, '&:hover': { bgcolor: t.dark }, fontWeight: 700, borderRadius: 1.5, fontSize: '0.72rem' }}
                         >
                           {downloading[user._id] ? 'Saving…' : 'Download PDF'}
                         </Button>
@@ -328,8 +552,8 @@ const IDCardGenerator = ({ companyName }) => {
 
           {filtered.length === 0 && !loadingUsers && (
             <Grid item xs={12}>
-              <Box sx={{ py: 8, textAlign: 'center', border: '1.5px dashed #D0D5DD', borderRadius: 3, bgcolor: '#FAFBFC' }}>
-                <BadgeIcon sx={{ fontSize: 48, color: '#D1D5DB', mb: 1 }} />
+              <Box sx={{ py: 8, textAlign: 'center', border: `1.5px dashed ${alpha(t.primary, 0.2)}`, borderRadius: 3, bgcolor: alpha(t.primary, 0.02) }}>
+                <BadgeIcon sx={{ fontSize: 48, color: alpha(t.primary, 0.25), mb: 1 }} />
                 <Typography variant="body2" sx={{ color: '#6B7280' }}>
                   No {userType.toLowerCase()}s found
                 </Typography>
