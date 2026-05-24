@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   Box, Typography, Grid, Card, CardContent, Button, TextField,
   InputAdornment, Chip, CircularProgress, alpha, ToggleButton,
@@ -10,7 +10,7 @@ import QrCodeIcon from '@mui/icons-material/QrCode';
 import BadgeIcon from '@mui/icons-material/Badge';
 import PrintIcon from '@mui/icons-material/Print';
 import { useDispatch, useSelector } from 'react-redux';
-import { generateQR } from '../../redux/qrAttendanceSlice';
+import { generateQR, loadQRUsers } from '../../redux/qrAttendanceSlice';
 import { useParams } from 'react-router-dom';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -138,6 +138,12 @@ const IDCardGenerator = ({ companyName }) => {
   const [downloading, setDownloading] = useState({});
   const cardRefs = useRef({});
 
+  // Reload whenever userType or companyId changes
+  useEffect(() => {
+    setSearch('');
+    dispatch(loadQRUsers({ companyId, userType }));
+  }, [userType, companyId, dispatch]);
+
   const filtered = users.filter(u =>
     u.name?.toLowerCase().includes(search.toLowerCase()) ||
     u.studentId?.toLowerCase().includes(search.toLowerCase()) ||
@@ -169,7 +175,7 @@ const IDCardGenerator = ({ companyName }) => {
   }, []);
 
   const handlePrintAll = useCallback(async () => {
-    const printable = users.filter(u => u.qrDataUrl);
+    const printable = filtered.filter(u => u.qrDataUrl);
     if (!printable.length) return;
 
     const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
@@ -191,7 +197,7 @@ const IDCardGenerator = ({ companyName }) => {
       pdf.addImage(imgData, 'PNG', x, y, cardW, cardH);
     }
     pdf.save('ID_Cards_All.pdf');
-  }, [users]);
+  }, [filtered]);
 
   return (
     <Box>
@@ -200,7 +206,7 @@ const IDCardGenerator = ({ companyName }) => {
         <ToggleButtonGroup
           value={userType}
           exclusive
-          onChange={(_, v) => v && setUserType(v)}
+          onChange={(_, v) => { if (v) setUserType(v); }}
           size="small"
           sx={{ '& .MuiToggleButton-root': { px: 2, fontWeight: 700 } }}
         >

@@ -92,8 +92,8 @@ const qrAttendanceSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      // users
-      .addCase(loadQRUsers.pending,    (s) => { s.loadingUsers = true; s.error = null; })
+      // users — clear immediately so wrong-type cards never flash
+      .addCase(loadQRUsers.pending,    (s) => { s.loadingUsers = true; s.error = null; s.users = []; })
       .addCase(loadQRUsers.fulfilled,  (s, a) => { s.loadingUsers = false; s.users = a.payload; })
       .addCase(loadQRUsers.rejected,   (s, a) => { s.loadingUsers = false; s.error = a.payload?.message; })
 

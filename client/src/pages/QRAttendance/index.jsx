@@ -63,12 +63,7 @@ const QRAttendancePage = () => {
     dispatch(loadDailySummary({ companyId }));
   }, [dispatch, companyId]);
 
-  // When ID Cards tab is selected, load the user list
-  useEffect(() => {
-    if (tab === 1) {
-      dispatch(loadQRUsers({ companyId, userType: 'Student' }));
-    }
-  }, [tab, dispatch, companyId]);
+  // ID Cards tab data is loaded inside IDCardGenerator itself
 
   // ── handle scan from webcam ──────────────────────────────────────────────
   const handleScanResult = useCallback(async (rawQR) => {

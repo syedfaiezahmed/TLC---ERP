@@ -5,10 +5,15 @@ import QrScan from '../models/QrScan.js';
 import QrAttendanceSettings from '../models/QrAttendanceSettings.js';
 import Student from '../models/Student.js';
 import Teacher from '../models/Teacher.js';
-import StudentEnrollment from '../models/StudentEnrollment.js';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
-const todayStr = () => new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
+const todayStr = () => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
 
 const getSettings = async (companyId) => {
   let s = await QrAttendanceSettings.findOne({ company: companyId });
