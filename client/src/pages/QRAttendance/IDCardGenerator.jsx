@@ -439,8 +439,33 @@ const IDCardGenerator = ({ companyName }) => {
     pdf.save(`ID_Cards_All_${userType}.pdf`);
   }, [filtered, userType]);
 
+  const SCALE = 0.52;
+
   return (
-    <Box>
+    <Box sx={{ position: 'relative' }}>
+
+      {/* ── Off-screen full-size cards for html2canvas capture ─────────── */}
+      {/* IMPORTANT: these must NOT be visibility:hidden or display:none */}
+      {/* position: absolute + left:-9999 keeps them rendered but invisible */}
+      <Box sx={{ position: 'absolute', left: -9999, top: 0, width: CW, zIndex: -1, pointerEvents: 'none' }}>
+        {filtered.map(user => (
+          <Box key={`hidden-${user._id}`} sx={{ mb: 2 }}>
+            <IDCardFront
+              ref={el => { frontRefs.current[user._id] = el; }}
+              user={user}
+              userType={userType}
+              companyName={companyName}
+            />
+            <Box sx={{ height: 8 }} />
+            <IDCardBack
+              ref={el => { backRefs.current[user._id] = el; }}
+              userType={userType}
+              companyName={companyName}
+            />
+          </Box>
+        ))}
+      </Box>
+
       {/* ── Toolbar ─────────────────────────────────────────────────────── */}
       <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap', alignItems: 'center' }}>
         <ToggleButtonGroup
@@ -496,24 +521,19 @@ const IDCardGenerator = ({ companyName }) => {
               <Card sx={{ border: `1px solid ${alpha(t.primary, 0.15)}`, boxShadow: 'none', borderRadius: 3 }}>
                 <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
 
-                  {/* Front + Back preview side-by-side, scaled to fit */}
-                  <Box sx={{ mb: 1.5, display: 'flex', justifyContent: 'center', gap: 1.5, overflow: 'hidden' }}>
-                    {/* Front — scaled 0.55 */}
-                    <Box sx={{ transform: 'scale(0.55)', transformOrigin: 'top left', width: CW * 0.55, height: CH * 0.55, flexShrink: 0 }}>
-                      <IDCardFront
-                        ref={el => { frontRefs.current[user._id] = el; }}
-                        user={user}
-                        userType={userType}
-                        companyName={companyName}
-                      />
+                  {/* Front + Back display preview — NO refs here, proper clip */}
+                  <Box sx={{ mb: 1.5, display: 'flex', justifyContent: 'center', gap: 1 }}>
+                    {/* Front display */}
+                    <Box sx={{ width: CW * SCALE, height: CH * SCALE, overflow: 'hidden', position: 'relative', flexShrink: 0, borderRadius: '7px' }}>
+                      <Box sx={{ position: 'absolute', top: 0, left: 0, transform: `scale(${SCALE})`, transformOrigin: 'top left' }}>
+                        <IDCardFront user={user} userType={userType} companyName={companyName} />
+                      </Box>
                     </Box>
-                    {/* Back — scaled 0.55 */}
-                    <Box sx={{ transform: 'scale(0.55)', transformOrigin: 'top left', width: CW * 0.55, height: CH * 0.55, flexShrink: 0 }}>
-                      <IDCardBack
-                        ref={el => { backRefs.current[user._id] = el; }}
-                        userType={userType}
-                        companyName={companyName}
-                      />
+                    {/* Back display */}
+                    <Box sx={{ width: CW * SCALE, height: CH * SCALE, overflow: 'hidden', position: 'relative', flexShrink: 0, borderRadius: '7px' }}>
+                      <Box sx={{ position: 'absolute', top: 0, left: 0, transform: `scale(${SCALE})`, transformOrigin: 'top left' }}>
+                        <IDCardBack userType={userType} companyName={companyName} />
+                      </Box>
                     </Box>
                   </Box>
 

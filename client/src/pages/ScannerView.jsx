@@ -25,16 +25,47 @@ const FEEDBACK = {
   error:      { bg: '#2B0D0D', border: '#D92D20', icon: <ErrorIcon          sx={{ fontSize: 56, color: '#D92D20' }} />, color: '#D92D20', action: 'ERROR' },
 };
 
-const playBeep = (freq = 880, dur = 150) => {
+// 'tak' = sharp percussive click (check-in / checkout)
+// 'warn' = soft lower tone (cooldown / already in)
+// 'error' = short low buzz (invalid / error)
+const playSound = (type = 'tak') => {
   try {
     const ctx  = new (window.AudioContext || window.webkitAudioContext)();
     const osc  = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain); gain.connect(ctx.destination);
-    osc.frequency.value = freq;
-    gain.gain.setValueAtTime(0.4, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur / 1000);
-    osc.start(); osc.stop(ctx.currentTime + dur / 1000);
+
+    if (type === 'tak') {
+      // Sharp bright click-ting
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(1600, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(500, ctx.currentTime + 0.07);
+      gain.gain.setValueAtTime(0.55, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+      osc.start(); osc.stop(ctx.currentTime + 0.13);
+    } else if (type === 'checkout') {
+      // Slightly lower double-tak
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(1100, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + 0.09);
+      gain.gain.setValueAtTime(0.5, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.13);
+      osc.start(); osc.stop(ctx.currentTime + 0.14);
+    } else if (type === 'warn') {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(520, ctx.currentTime);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+      osc.start(); osc.stop(ctx.currentTime + 0.2);
+    } else {
+      // Error — low buzz
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(260, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.18);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+      osc.start(); osc.stop(ctx.currentTime + 0.2);
+    }
   } catch (_) {}
 };
 
@@ -130,21 +161,20 @@ const ScannerView = () => {
   const handleScan = useCallback(async (rawQR) => {
     if (!rawQR.startsWith('TLC-QR-')) {
       showFeedback({ type: 'invalid', message: 'Not a valid attendance QR' });
-      playBeep(200, 300);
+      playSound('error');
       return;
     }
     try {
       const { data } = await processQRScan({ rawQR, companyId });
       showFeedback(data);
-      if (data.type === 'checkin' || data.type === 'checkout') {
-        playBeep(data.type === 'checkin' ? 880 : 660, 150);
-      } else {
-        playBeep(300, 250);
-      }
+      if (data.type === 'checkin')  playSound('tak');
+      else if (data.type === 'checkout') playSound('checkout');
+      else if (['cooldown','already_in','completed'].includes(data.type)) playSound('warn');
+      else playSound('error');
     } catch (err) {
       const payload = err.response?.data || {};
       showFeedback({ type: payload.type || 'error', message: payload.message || 'Scan failed', userName: payload.userName });
-      playBeep(200, 300);
+      playSound('error');
     }
   }, [companyId]);
 
