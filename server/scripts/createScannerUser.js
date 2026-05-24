@@ -12,7 +12,9 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.join(__dirname, '../../.env') });
+// Try server/.env first, then project root .env
+dotenv.config({ path: path.join(__dirname, '../.env') });
+if (!process.env.MONGO_URI) dotenv.config({ path: path.join(__dirname, '../../.env') });
 
 import mongoose from 'mongoose';
 import User from '../src/models/User.js';
