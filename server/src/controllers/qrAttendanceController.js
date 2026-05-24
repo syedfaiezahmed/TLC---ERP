@@ -128,28 +128,32 @@ export const processScan = async (req, res) => {
           checkOut: scan.checkOut,
         });
 
-      // Checkout enabled and check-in exists → do check-out
-      if (settings.checkoutEnabled && scan.checkIn && !scan.checkOut) {
-        const durationMs = now - new Date(scan.checkIn);
-        const duration = Math.round(durationMs / 60000);
-        scan.checkOut = now;
-        scan.duration = duration;
-        scan.status = 'completed';
-        scan.lastScanAt = now;
-        await scan.save();
+      // Second scan within 14-hour window → automatic check-out
+      const CHECKOUT_WINDOW_HOURS = 14;
+      if (scan.checkIn && !scan.checkOut) {
+        const hoursSinceCheckIn = (now - new Date(scan.checkIn)) / (1000 * 60 * 60);
+        if (hoursSinceCheckIn <= CHECKOUT_WINDOW_HOURS) {
+          const durationMs = now - new Date(scan.checkIn);
+          const duration   = Math.round(durationMs / 60000);
+          scan.checkOut    = now;
+          scan.duration    = duration;
+          scan.status      = 'completed';
+          scan.lastScanAt  = now;
+          await scan.save();
 
-        return res.json({
-          type: 'checkout',
-          message: `Check-out recorded for ${scan.userName}`,
-          userName: scan.userName,
-          userType: qrRecord.userType,
-          checkIn: scan.checkIn,
-          checkOut: scan.checkOut,
-          duration,
-        });
+          return res.json({
+            type: 'checkout',
+            message: `Check-out recorded for ${scan.userName}`,
+            userName: scan.userName,
+            userType: qrRecord.userType,
+            checkIn: scan.checkIn,
+            checkOut: scan.checkOut,
+            duration,
+          });
+        }
       }
 
-      // Checkout not enabled and already checked in
+      // Beyond 14-hour window — already marked in
       return res.status(409).json({
         message: `${scan.userName} already checked in today`,
         type: 'already_in',

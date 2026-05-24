@@ -124,6 +124,15 @@ const ScannerView = () => {
     }
   }, []);
 
+  const stopCamera = useCallback(() => {
+    if (loopRef.current) clearInterval(loopRef.current);
+    streamRef.current?.getTracks().forEach(t => t.stop());
+    if (videoRef.current) videoRef.current.srcObject = null;
+    streamRef.current = null;
+    setActive(false);
+    setCamError(null);
+  }, []);
+
   // Auto-start on mount
   useEffect(() => {
     startCamera();
@@ -227,6 +236,24 @@ const ScannerView = () => {
               {active ? 'LIVE' : 'OFFLINE'}
             </Typography>
           </Box>
+
+          {/* Stop / Start camera toggle */}
+          <Box
+            onClick={active ? stopCamera : startCamera}
+            sx={{
+              px: 1.5, py: 0.4, borderRadius: 1.5, cursor: 'pointer', fontWeight: 700,
+              fontSize: '0.72rem', letterSpacing: '0.04em',
+              bgcolor: active ? alpha('#D92D20', 0.15) : alpha(QB_GREEN, 0.15),
+              color:   active ? '#D92D20'              : QB_GREEN,
+              border: `1px solid ${active ? alpha('#D92D20', 0.4) : alpha(QB_GREEN, 0.4)}`,
+              transition: 'all 0.2s',
+              '&:hover': { opacity: 0.8 },
+              userSelect: 'none',
+            }}
+          >
+            {starting ? '…' : active ? '⏹ Stop Camera' : '▶ Start Camera'}
+          </Box>
+
           <Typography
             onClick={() => dispatch(logout())}
             sx={{ fontSize: '0.72rem', color: '#8B949E', cursor: 'pointer', '&:hover': { color: '#D92D20' } }}
