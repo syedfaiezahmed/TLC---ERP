@@ -26,6 +26,7 @@ import QRScanner       from './QRScanner';
 import IDCardGenerator from './IDCardGenerator';
 import AttendanceLogs  from './AttendanceLogs';
 import QRSettings      from './QRSettings';
+import TodayRegister   from './TodayRegister';
 
 const QB_GREEN = '#2CA01C';
 
@@ -194,8 +195,8 @@ const QRAttendancePage = () => {
         <IDCardGenerator companyName={selectedCompany?.name} />
       )}
 
-      {/* Today's log */}
-      {tab === 2 && <AttendanceLogs view="today" />}
+      {/* Today's Register */}
+      {tab === 2 && <TodayRegister />}
 
       {/* History */}
       {tab === 3 && <AttendanceLogs view="history" />}

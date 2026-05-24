@@ -5,6 +5,7 @@ import QrScan from '../models/QrScan.js';
 import QrAttendanceSettings from '../models/QrAttendanceSettings.js';
 import Student from '../models/Student.js';
 import Teacher from '../models/Teacher.js';
+import Attendance from '../models/Attendance.js';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 const todayStr = () => {
@@ -191,6 +192,19 @@ export const processScan = async (req, res) => {
       status: 'present',
       lastScanAt: now,
     });
+
+    // ── Auto-create Attendance record for teachers (feeds payroll system) ──
+    if (qrRecord.userType === 'Teacher') {
+      const localMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+      const endOfDay      = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      await Attendance.findOneAndUpdate(
+        { company: companyId, teacher: qrRecord.userId, type: 'Teacher',
+          date: { $gte: localMidnight, $lte: endOfDay } },
+        { $setOnInsert: { company: companyId, teacher: qrRecord.userId,
+            type: 'Teacher', date: localMidnight, status: 'Present', classHeld: true } },
+        { upsert: true }
+      ).catch(() => {});
+    }
 
     return res.json({
       type: 'checkin',
