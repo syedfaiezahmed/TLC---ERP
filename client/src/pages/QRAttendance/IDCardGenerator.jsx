@@ -20,106 +20,126 @@ const CARD_BG  = '#1C2B36';
 
 // ── Single ID card (rendered to DOM for PDF capture) ────────────────────────
 const IDCard = React.forwardRef(({ user, userType, companyName }, ref) => {
-  const initials = user.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
-  const roleColor = userType === 'Student' ? QB_GREEN : '#0077C5';
+  const initials   = user.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
+  const roleColor  = userType === 'Student' ? QB_GREEN : '#0077C5';
+  const roleDark   = userType === 'Student' ? '#1A6010' : '#004F83';
+  const infoText   = user.group?.name || user.specialization || '';
+  const idText     = user.studentId || user.contact || '';
 
   return (
     <Box
       ref={ref}
       sx={{
-        width: 320, height: 200,
+        width: 340, height: 215,
         bgcolor: '#FFFFFF',
-        borderRadius: 2,
+        borderRadius: '10px',
         overflow: 'hidden',
         display: 'flex',
         flexDirection: 'column',
-        fontFamily: '"Inter", "Roboto", sans-serif',
-        boxShadow: '0 4px 24px rgba(0,0,0,0.12)',
-        border: '1px solid #E5E7EB',
+        fontFamily: '"Inter","Roboto",sans-serif',
+        boxShadow: '0 6px 32px rgba(0,0,0,0.15)',
+        border: `1px solid #E5E7EB`,
+        flexShrink: 0,
       }}
     >
-      {/* Top accent bar */}
-      <Box sx={{ height: 6, bgcolor: roleColor, flexShrink: 0 }} />
+      {/* ── Header bar ──────────────────────────────────────────────── */}
+      <Box sx={{
+        bgcolor: roleColor, px: 1.5, py: 0.7, flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+        <Typography sx={{ fontSize: '0.72rem', fontWeight: 800, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          {companyName || 'The Learning Centre'}
+        </Typography>
+        <Box sx={{ px: 0.75, py: 0.2, borderRadius: 8, bgcolor: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.4)' }}>
+          <Typography sx={{ fontSize: '0.58rem', fontWeight: 800, color: '#fff', letterSpacing: '0.06em' }}>
+            {userType.toUpperCase()}
+          </Typography>
+        </Box>
+      </Box>
 
-      {/* Body */}
-      <Box sx={{ display: 'flex', flex: 1, p: 1.5, gap: 1.5 }}>
-        {/* Left: photo + role chip */}
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.75, flexShrink: 0 }}>
-          {/* Photo / placeholder */}
+      {/* ── Body ────────────────────────────────────────────────────── */}
+      <Box sx={{ display: 'flex', flex: 1, p: 1.25, gap: 1.25 }}>
+
+        {/* Left: photo */}
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
           <Box sx={{
-            width: 64, height: 64, borderRadius: 2,
-            bgcolor: alpha(roleColor, 0.1),
-            border: `2px solid ${alpha(roleColor, 0.3)}`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: 72, height: 80, borderRadius: '6px',
+            border: `2px solid ${roleColor}`,
             overflow: 'hidden',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            bgcolor: alpha(roleColor, 0.07),
+            flexShrink: 0,
           }}>
             {user.profileImage ? (
-              <img src={user.profileImage} alt={user.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <img
+                src={user.profileImage}
+                alt={user.name}
+                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                crossOrigin="anonymous"
+              />
             ) : (
-              <Typography sx={{ fontSize: '1.4rem', fontWeight: 800, color: roleColor }}>
+              <Typography sx={{ fontSize: '1.6rem', fontWeight: 900, color: roleColor, lineHeight: 1 }}>
                 {initials}
               </Typography>
             )}
           </Box>
-          <Box sx={{
-            px: 0.75, py: 0.25, borderRadius: 10,
-            bgcolor: roleColor, display: 'inline-block',
-          }}>
-            <Typography sx={{ fontSize: '0.55rem', fontWeight: 800, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              {userType}
+          {idText && (
+            <Typography sx={{ fontSize: '0.52rem', color: '#9CA3AF', fontWeight: 700, textAlign: 'center', lineHeight: 1.2, maxWidth: 72 }} noWrap>
+              {idText}
             </Typography>
-          </Box>
+          )}
         </Box>
 
-        {/* Middle: info */}
-        <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-          <Box>
-            <Typography sx={{ fontSize: '0.9rem', fontWeight: 800, color: '#111827', lineHeight: 1.2, mb: 0.25 }} noWrap>
-              {user.name}
-            </Typography>
-            {(user.group?.name || user.info || user.specialization) && (
-              <Typography sx={{ fontSize: '0.65rem', color: '#6B7280', fontWeight: 500 }} noWrap>
-                {user.group?.name || user.info || user.specialization}
+        {/* Middle: name + info */}
+        <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 0.4 }}>
+          <Typography sx={{ fontSize: '1rem', fontWeight: 900, color: '#111827', lineHeight: 1.15, wordBreak: 'break-word' }}>
+            {user.name}
+          </Typography>
+          {infoText && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4 }}>
+              <Box sx={{ width: 3, height: 10, borderRadius: 2, bgcolor: roleColor, flexShrink: 0 }} />
+              <Typography sx={{ fontSize: '0.65rem', color: roleColor, fontWeight: 700 }} noWrap>
+                {infoText}
               </Typography>
-            )}
-            {(user.studentId || user.contact) && (
-              <Typography sx={{ fontSize: '0.65rem', color: '#9CA3AF', mt: 0.25 }}>
-                ID: {user.studentId || user.contact}
-              </Typography>
-            )}
-          </Box>
-
-          {/* Institute name */}
-          <Box>
-            <Box sx={{ height: 1, bgcolor: '#F3F4F6', mb: 0.5 }} />
-            <Typography sx={{ fontSize: '0.6rem', color: '#9CA3AF', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              {companyName || 'The Learning Centre'}
-            </Typography>
-          </Box>
+            </Box>
+          )}
+          <Box sx={{ mt: 0.5, height: 1, bgcolor: '#F3F4F6' }} />
+          <Typography sx={{ fontSize: '0.58rem', color: '#9CA3AF', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            Attendance ID Card
+          </Typography>
         </Box>
 
         {/* Right: QR code */}
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 0.4, flexShrink: 0 }}>
           {user.qrDataUrl ? (
-            <Box sx={{
-              p: 0.5, bgcolor: '#fff', borderRadius: 1,
-              border: '1px solid #E5E7EB',
-            }}>
-              <img src={user.qrDataUrl} alt="QR" width={68} height={68} style={{ display: 'block' }} />
-            </Box>
+            <>
+              <Box sx={{ p: 0.5, bgcolor: '#fff', borderRadius: '5px', border: `1.5px solid ${roleColor}`, lineHeight: 0 }}>
+                <img src={user.qrDataUrl} alt="QR" width={76} height={76} style={{ display: 'block' }} />
+              </Box>
+              <Typography sx={{ fontSize: '0.5rem', color: '#9CA3AF', fontWeight: 600, letterSpacing: '0.04em' }}>
+                SCAN TO MARK
+              </Typography>
+            </>
           ) : (
             <Box sx={{
-              width: 68, height: 68, borderRadius: 1,
-              bgcolor: '#F9FAFB', border: '1px dashed #D1D5DB',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 76, height: 76, borderRadius: '5px',
+              bgcolor: '#F9FAFB', border: '1.5px dashed #D1D5DB',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 0.5,
             }}>
               <QrCodeIcon sx={{ fontSize: 28, color: '#D1D5DB' }} />
+              <Typography sx={{ fontSize: '0.48rem', color: '#D1D5DB', textAlign: 'center', px: 0.5 }}>
+                Generate QR
+              </Typography>
             </Box>
           )}
-          <Typography sx={{ fontSize: '0.5rem', color: '#D1D5DB', mt: 0.25 }}>
-            Scan to Mark
-          </Typography>
         </Box>
+      </Box>
+
+      {/* ── Footer ──────────────────────────────────────────────────── */}
+      <Box sx={{ bgcolor: roleDark, px: 1.5, py: 0.45, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
+        <Typography sx={{ fontSize: '0.52rem', color: 'rgba(255,255,255,0.7)', fontWeight: 600, letterSpacing: '0.06em' }}>
+          Smart QR Attendance System · {companyName || 'The Learning Centre'}
+        </Typography>
       </Box>
     </Box>
   );

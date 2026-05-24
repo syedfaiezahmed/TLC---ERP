@@ -39,6 +39,7 @@ const lazyRetry = (componentImport) => {
 const Login = lazy(() => lazyRetry(() => import('./pages/Login')));
 const Dashboard = lazy(() => lazyRetry(() => import('./pages/Dashboard')));
 const Expenses = lazy(() => lazyRetry(() => import('./pages/Expenses')));
+const ScannerView = lazy(() => lazyRetry(() => import('./pages/ScannerView')));
 
 const LoadingFallback = () => (
   <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', bgcolor: 'background.default' }}>
@@ -52,6 +53,11 @@ const RootRedirect = () => {
   const authData = useSelector((state) => state.auth.authData);
   
   if (!authData) return <Navigate to="/login" replace />;
+  
+  // Scanner-only account → dedicated full-screen scanner, no ERP
+  if (authData.role === 'scanner') {
+    return <Navigate to={`/scanner/${authData.company}`} replace />;
+  }
   
   if (authData.company) {
     return <Navigate to={`/company/${authData.company}/dashboard`} replace />;
@@ -106,6 +112,7 @@ function App() {
               <Route path="/" element={<RootRedirect />} />
               <Route path="/login" element={<Login />} />
               <Route path="/company/:companyId/*" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+              <Route path="/scanner/:companyId" element={<PrivateRoute><ScannerView /></PrivateRoute>} />
               <Route path="*" element={<RootRedirect />} />
             </Routes>
           </Suspense>
