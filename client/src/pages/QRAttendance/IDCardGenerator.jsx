@@ -85,29 +85,31 @@ const IDCardFront = React.forwardRef(({ user, userType, companyName }, ref) => {
             </Typography>
           </Box>
         </Box>
-        {/* Role tag */}
+        {/* Role tag — accent colour so it pops against the primary gradient */}
         <Box sx={{
           display: 'inline-flex', alignItems: 'center',
-          bgcolor: 'rgba(255,255,255,0.18)',
-          border: '1px solid rgba(255,255,255,0.35)',
+          bgcolor: t.accent,
           borderRadius: '4px',
-          px: 0.75, py: 0.15,
+          px: 0.75, py: 0.2,
+          boxShadow: `0 2px 6px ${alpha(t.accent, 0.5)}`,
         }}>
           <Typography sx={{ fontSize: '0.52rem', fontWeight: 900, color: '#fff', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
             {userType} ID Card
           </Typography>
         </Box>
       </Box>
+      {/* Accent stripe below header */}
+      <Box sx={{ height: 3, background: `linear-gradient(90deg,${t.accent} 0%,${alpha(t.accent,0.3)} 100%)`, flexShrink: 0 }} />
 
       {/* ── Photo ───────────────────────────────────────────────────── */}
       <Box sx={{ display: 'flex', justifyContent: 'center', mt: 1.5, mb: 1, flexShrink: 0 }}>
+        {/* Dual-colour outer ring: primary + accent */}
+        <Box sx={{ p: '2.5px', borderRadius: '10px', background: `linear-gradient(135deg,${t.primary} 0%,${t.accent} 100%)` }}>
         <Box sx={{
           width: 74, height: 88,
-          borderRadius: '8px',
-          border: `3px solid ${t.primary}`,
-          boxShadow: `0 4px 16px ${alpha(t.primary, 0.35)}`,
+          borderRadius: '7px',
           overflow: 'hidden',
-          bgcolor: alpha(t.primary, 0.06),
+          bgcolor: alpha(t.primary, 0.05),
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           position: 'relative',
         }}>
@@ -125,13 +127,14 @@ const IDCardFront = React.forwardRef(({ user, userType, companyName }, ref) => {
             </>
           )}
           {/* Accent corner */}
-          <Box sx={{ position: 'absolute', bottom: 0, right: 0, width: 18, height: 18,
-            background: t.accent, borderTopLeftRadius: '6px',
+          <Box sx={{ position: 'absolute', bottom: 0, right: 0, width: 20, height: 20,
+            background: t.accent, borderTopLeftRadius: '7px',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: '#fff' }} />
+            <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: '#fff' }} />
           </Box>
         </Box>
+        </Box>  {/* end dual-colour ring */}
       </Box>
 
       {/* ── Name & info ─────────────────────────────────────────────── */}
@@ -144,11 +147,14 @@ const IDCardFront = React.forwardRef(({ user, userType, companyName }, ref) => {
         </Typography>
 
         {infoText && (
-          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 0.5, mt: 0.4 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
             <Box sx={{ width: 14, height: 2, borderRadius: 1, bgcolor: t.accent }} />
-            <Typography sx={{ fontSize: '0.62rem', fontWeight: 700, color: t.primary }}>
-              {infoText}
-            </Typography>
+            {/* Accent pill badge for batch/subject — most visible secondary element */}
+            <Box sx={{ px: 0.75, py: 0.15, borderRadius: '20px', bgcolor: alpha(t.accent, 0.12), border: `1px solid ${alpha(t.accent, 0.4)}` }}>
+              <Typography sx={{ fontSize: '0.6rem', fontWeight: 800, color: t.accent }}>
+                {infoText}
+              </Typography>
+            </Box>
             <Box sx={{ width: 14, height: 2, borderRadius: 1, bgcolor: t.accent }} />
           </Box>
         )}
@@ -173,10 +179,11 @@ const IDCardFront = React.forwardRef(({ user, userType, companyName }, ref) => {
       <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 0.5, flexShrink: 0 }}>
         {user.qrDataUrl ? (
           <>
+            {/* QR box — accent border so it stands out */}
             <Box sx={{
               p: 0.6, bgcolor: '#fff', borderRadius: '8px',
-              border: `2px solid ${t.primary}`,
-              boxShadow: `0 2px 12px ${alpha(t.primary, 0.2)}`,
+              border: `2px solid ${t.accent}`,
+              boxShadow: `0 2px 12px ${alpha(t.accent, 0.25)}, 0 0 0 1px ${alpha(t.primary, 0.15)}`,
               lineHeight: 0,
             }}>
               <img src={user.qrDataUrl} alt="QR" width={82} height={82} style={{ display: 'block' }} />
@@ -211,7 +218,7 @@ const IDCardFront = React.forwardRef(({ user, userType, companyName }, ref) => {
           {userType.toUpperCase()}
         </Typography>
         <Box sx={{ width: 24, height: 1.5, borderRadius: 1, bgcolor: t.accent }} />
-        <Typography sx={{ fontSize: '0.5rem', color: 'rgba(255,255,255,0.6)', fontWeight: 600 }}>
+        <Typography sx={{ fontSize: '0.5rem', color: t.accent, fontWeight: 800 }}>
           {year}–{String(year + 1).slice(2)}
         </Typography>
       </Box>
@@ -262,16 +269,18 @@ const IDCardBack = React.forwardRef(({ userType, companyName }, ref) => {
         </Box>
       </Box>
 
-      {/* ── Accent stripe ────────────────────────────────────────────── */}
-      <Box sx={{ height: 3, background: `linear-gradient(90deg,${t.accent},${t.primary})`, flexShrink: 0 }} />
+      {/* ── Accent stripe — thicker so it’s clearly visible ───────── */}
+      <Box sx={{ height: 4, background: `linear-gradient(90deg,${t.accent} 0%,${t.primary} 60%,${t.accent} 100%)`, flexShrink: 0 }} />
 
       {/* ── Policies ─────────────────────────────────────────────────── */}
       <Box sx={{ px: 1.5, pt: 1.25, flex: 1, display: 'flex', flexDirection: 'column' }}>
+        {/* Section title — primary bar + accent pill */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, mb: 1 }}>
-          <Box sx={{ width: 3, height: 14, borderRadius: 2, bgcolor: t.primary }} />
-          <Typography sx={{ fontSize: '0.62rem', fontWeight: 900, color: t.primary, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+          <Box sx={{ width: 3, height: 14, borderRadius: 2, bgcolor: t.accent }} />
+          <Typography sx={{ fontSize: '0.6rem', fontWeight: 900, color: t.primary, letterSpacing: '0.08em', textTransform: 'uppercase', flex: 1 }}>
             Card Policies & Guidelines
           </Typography>
+          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: alpha(t.accent, 0.25), border: `1.5px solid ${t.accent}` }} />
         </Box>
 
         {policies.map((p, i) => (
@@ -284,14 +293,15 @@ const IDCardBack = React.forwardRef(({ userType, companyName }, ref) => {
         ))}
       </Box>
 
-      {/* ── Return info ──────────────────────────────────────────────── */}
+      {/* ── Return info — accent-bordered box ──────────────────────── */}
       <Box sx={{
         mx: 1.5, mb: 1.25, borderRadius: '8px',
-        bgcolor: alpha(t.primary, 0.05),
-        border: `1px solid ${alpha(t.primary, 0.15)}`,
+        bgcolor: alpha(t.accent, 0.04),
+        border: `1.5px solid ${alpha(t.accent, 0.35)}`,
         p: 1, flexShrink: 0,
+        borderLeft: `3px solid ${t.accent}`,
       }}>
-        <Typography sx={{ fontSize: '0.52rem', fontWeight: 800, color: t.primary, mb: 0.4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+        <Typography sx={{ fontSize: '0.52rem', fontWeight: 800, color: t.accent, mb: 0.4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
           If Found, Please Return To:
         </Typography>
         <Typography sx={{ fontSize: '0.58rem', fontWeight: 700, color: '#111827' }}>
