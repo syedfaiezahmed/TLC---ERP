@@ -64,12 +64,11 @@ const IDCardFront = React.forwardRef(({ user, userType, companyName }, ref) => {
       flexShrink: 0,
       position: 'relative',
     }}>
-      {/* ── Header gradient ─────────────────────────────────────────── */}
-      <Box sx={{ background: t.gradient, px: 1.5, pt: 1.25, pb: 1, flexShrink: 0 }}>
-        {/* Logo + institute */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
+      {/* ── Header (compact) ────────────────────────────────────────── */}
+      <Box sx={{ background: t.gradient, px: 1.5, pt: 0.75, pb: 0.75, flexShrink: 0 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6, mb: 0.35 }}>
           <Box sx={{
-            width: 26, height: 26, borderRadius: '6px',
+            width: 22, height: 22, borderRadius: '5px',
             bgcolor: 'rgba(255,255,255,0.2)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             overflow: 'hidden', flexShrink: 0,
@@ -77,96 +76,85 @@ const IDCardFront = React.forwardRef(({ user, userType, companyName }, ref) => {
             <img src={LOGO} alt="logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} crossOrigin="anonymous" />
           </Box>
           <Box>
-            <Typography sx={{ fontSize: '0.72rem', fontWeight: 900, color: '#fff', lineHeight: 1, letterSpacing: '0.02em' }}>
+            <Typography sx={{ fontSize: '0.7rem', fontWeight: 900, color: '#fff', lineHeight: 1, letterSpacing: '0.02em' }}>
               {companyName || 'The Learning Centre'}
             </Typography>
-            <Typography sx={{ fontSize: '0.48rem', color: 'rgba(255,255,255,0.75)', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+            <Typography sx={{ fontSize: '0.44rem', color: 'rgba(255,255,255,0.75)', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
               Smart Attendance System
             </Typography>
           </Box>
         </Box>
-        {/* Role tag — accent colour so it pops against the primary gradient */}
         <Box sx={{
           display: 'inline-flex', alignItems: 'center',
-          bgcolor: t.accent,
-          borderRadius: '4px',
-          px: 0.75, py: 0.2,
+          bgcolor: t.accent, borderRadius: '4px',
+          px: 0.75, py: 0.15,
           boxShadow: `0 2px 6px ${alpha(t.accent, 0.5)}`,
         }}>
-          <Typography sx={{ fontSize: '0.52rem', fontWeight: 900, color: '#fff', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+          <Typography sx={{ fontSize: '0.5rem', fontWeight: 900, color: '#fff', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
             {userType} ID Card
           </Typography>
         </Box>
       </Box>
-      {/* Accent stripe below header */}
+      {/* Accent stripe */}
       <Box sx={{ height: 3, background: `linear-gradient(90deg,${t.accent} 0%,${alpha(t.accent,0.3)} 100%)`, flexShrink: 0 }} />
 
-      {/* ── Photo ───────────────────────────────────────────────────── */}
-      <Box sx={{ display: 'flex', justifyContent: 'center', mt: 1.5, mb: 1, flexShrink: 0 }}>
-        {/* Dual-colour outer ring: primary + accent */}
-        <Box sx={{ p: '2.5px', borderRadius: '10px', background: `linear-gradient(135deg,${t.primary} 0%,${t.accent} 100%)` }}>
-        <Box sx={{
-          width: 74, height: 88,
-          borderRadius: '7px',
-          overflow: 'hidden',
-          bgcolor: alpha(t.primary, 0.05),
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          position: 'relative',
-        }}>
-          {user.profileImage ? (
-            <img src={user.profileImage} alt={user.name}
-              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-              crossOrigin="anonymous" />
-          ) : (
-            <>
-              {/* Decorative circles behind initials */}
-              <Box sx={{ position: 'absolute', width: 60, height: 60, borderRadius: '50%', bgcolor: alpha(t.primary, 0.06), top: '50%', left: '50%', transform: 'translate(-50%,-50%)' }} />
-              <Typography sx={{ fontSize: '2rem', fontWeight: 900, color: t.primary, lineHeight: 1, zIndex: 1 }}>
-                {initials}
-              </Typography>
-            </>
-          )}
-          {/* Accent corner */}
-          <Box sx={{ position: 'absolute', bottom: 0, right: 0, width: 20, height: 20,
-            background: t.accent, borderTopLeftRadius: '7px',
+      {/* ── Photo + Info  (side-by-side — saves ~80px vs stacked) ───── */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 1.5, mt: 1.25, mb: 0.75, flexShrink: 0 }}>
+        {/* Photo with dual-colour ring */}
+        <Box sx={{ p: '2.5px', borderRadius: '9px', background: `linear-gradient(135deg,${t.primary} 0%,${t.accent} 100%)`, flexShrink: 0 }}>
+          <Box sx={{
+            width: 58, height: 70,
+            borderRadius: '7px', overflow: 'hidden',
+            bgcolor: alpha(t.primary, 0.05),
             display: 'flex', alignItems: 'center', justifyContent: 'center',
+            position: 'relative',
           }}>
-            <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: '#fff' }} />
+            {user.profileImage ? (
+              <img src={user.profileImage} alt={user.name}
+                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                crossOrigin="anonymous" />
+            ) : (
+              <>
+                <Box sx={{ position: 'absolute', width: 46, height: 46, borderRadius: '50%', bgcolor: alpha(t.primary, 0.07), top: '50%', left: '50%', transform: 'translate(-50%,-50%)' }} />
+                <Typography sx={{ fontSize: '1.5rem', fontWeight: 900, color: t.primary, lineHeight: 1, zIndex: 1 }}>
+                  {initials}
+                </Typography>
+              </>
+            )}
+            <Box sx={{ position: 'absolute', bottom: 0, right: 0, width: 16, height: 16,
+              background: t.accent, borderTopLeftRadius: '6px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <Box sx={{ width: 5, height: 5, borderRadius: '50%', bgcolor: '#fff' }} />
+            </Box>
           </Box>
         </Box>
-        </Box>  {/* end dual-colour ring */}
-      </Box>
 
-      {/* ── Name & info ─────────────────────────────────────────────── */}
-      <Box sx={{ px: 1.5, mb: 0.75, textAlign: 'center', flexShrink: 0 }}>
-        <Typography sx={{
-          fontSize: '0.9rem', fontWeight: 900, color: '#111827',
-          lineHeight: 1.2, letterSpacing: '-0.01em',
-        }}>
-          {user.name}
-        </Typography>
-
-        {infoText && (
-          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
-            <Box sx={{ width: 14, height: 2, borderRadius: 1, bgcolor: t.accent }} />
-            {/* Accent pill badge for batch/subject — most visible secondary element */}
-            <Box sx={{ px: 0.75, py: 0.15, borderRadius: '20px', bgcolor: alpha(t.accent, 0.12), border: `1px solid ${alpha(t.accent, 0.4)}` }}>
-              <Typography sx={{ fontSize: '0.6rem', fontWeight: 800, color: t.accent }}>
+        {/* Name + group + ID */}
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography sx={{
+            fontSize: '0.85rem', fontWeight: 900, color: '#111827',
+            lineHeight: 1.2, letterSpacing: '-0.01em',
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          }}>
+            {user.name}
+          </Typography>
+          {infoText && (
+            <Box sx={{ mt: 0.4, display: 'inline-block', px: 0.7, py: 0.12, borderRadius: '20px', bgcolor: alpha(t.accent, 0.12), border: `1px solid ${alpha(t.accent, 0.4)}` }}>
+              <Typography sx={{ fontSize: '0.58rem', fontWeight: 800, color: t.accent }}>
                 {infoText}
               </Typography>
             </Box>
-            <Box sx={{ width: 14, height: 2, borderRadius: 1, bgcolor: t.accent }} />
-          </Box>
-        )}
-
-        {idText && (
-          <Typography sx={{ fontSize: '0.58rem', color: '#9CA3AF', fontWeight: 600, mt: 0.25, letterSpacing: '0.03em' }}>
-            ID: {idText}
-          </Typography>
-        )}
+          )}
+          {idText && (
+            <Typography sx={{ fontSize: '0.56rem', color: '#9CA3AF', fontWeight: 600, mt: 0.3, letterSpacing: '0.03em' }}>
+              ID: {idText}
+            </Typography>
+          )}
+        </Box>
       </Box>
 
-      {/* ── Divider with dots ───────────────────────────────────────── */}
+      {/* ── Divider ─────────────────────────────────────────────────── */}
       <Box sx={{ display: 'flex', alignItems: 'center', px: 1.5, mb: 0.75, flexShrink: 0 }}>
         <Box sx={{ flex: 1, height: 1, bgcolor: '#F0F0F0' }} />
         <Box sx={{ mx: 0.5, width: 4, height: 4, borderRadius: '50%', bgcolor: t.accent }} />
@@ -175,21 +163,20 @@ const IDCardFront = React.forwardRef(({ user, userType, companyName }, ref) => {
         <Box sx={{ flex: 1, height: 1, bgcolor: '#F0F0F0' }} />
       </Box>
 
-      {/* ── QR Code ─────────────────────────────────────────────────── */}
-      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 0.5, flexShrink: 0 }}>
+      {/* ── QR Code (96×96 — fully visible) ─────────────────────────── */}
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 0.25, flexShrink: 0 }}>
         {user.qrDataUrl ? (
           <>
-            {/* QR box — accent border so it stands out */}
             <Box sx={{
-              p: 0.6, bgcolor: '#fff', borderRadius: '8px',
-              border: `2px solid ${t.accent}`,
-              boxShadow: `0 2px 12px ${alpha(t.accent, 0.25)}, 0 0 0 1px ${alpha(t.primary, 0.15)}`,
+              p: '5px', bgcolor: '#fff', borderRadius: '10px',
+              border: `2.5px solid ${t.accent}`,
+              boxShadow: `0 4px 16px ${alpha(t.accent, 0.3)}, 0 0 0 1px ${alpha(t.primary, 0.15)}`,
               lineHeight: 0,
             }}>
-              <img src={user.qrDataUrl} alt="QR" width={82} height={82} style={{ display: 'block' }} />
+              <img src={user.qrDataUrl} alt="QR" width={100} height={100} style={{ display: 'block' }} />
             </Box>
             <Typography sx={{
-              fontSize: '0.46rem', fontWeight: 800, mt: 0.4,
+              fontSize: '0.45rem', fontWeight: 800, mt: 0.5,
               color: t.accent, letterSpacing: '0.12em', textTransform: 'uppercase',
             }}>
               ▶ Scan to Mark Attendance ◀
@@ -197,11 +184,11 @@ const IDCardFront = React.forwardRef(({ user, userType, companyName }, ref) => {
           </>
         ) : (
           <Box sx={{
-            width: 82, height: 82, borderRadius: '8px',
+            width: 100, height: 100, borderRadius: '10px',
             bgcolor: '#F9FAFB', border: `2px dashed ${alpha(t.primary, 0.3)}`,
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 0.4,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 0.5,
           }}>
-            <QrCodeIcon sx={{ fontSize: 28, color: alpha(t.primary, 0.3) }} />
+            <QrCodeIcon sx={{ fontSize: 32, color: alpha(t.primary, 0.3) }} />
             <Typography sx={{ fontSize: '0.44rem', color: alpha(t.primary, 0.4), fontWeight: 700 }}>
               QR Not Generated
             </Typography>
@@ -211,7 +198,7 @@ const IDCardFront = React.forwardRef(({ user, userType, companyName }, ref) => {
 
       {/* ── Footer ──────────────────────────────────────────────────── */}
       <Box sx={{
-        mt: 'auto', bgcolor: t.footerBg, px: 1.5, py: 0.55,
+        mt: 'auto', bgcolor: t.footerBg, px: 1.5, py: 0.5,
         display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0,
       }}>
         <Typography sx={{ fontSize: '0.5rem', color: 'rgba(255,255,255,0.8)', fontWeight: 700, letterSpacing: '0.04em' }}>

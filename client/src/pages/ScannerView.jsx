@@ -150,8 +150,12 @@ const ScannerView = () => {
       const canvas = canvasRef.current;
       if (!video || !canvas || video.readyState < video.HAVE_ENOUGH_DATA) return;
 
-      canvas.width  = video.videoWidth;
-      canvas.height = video.videoHeight;
+      // Cap at 640×360 — jsQR processes 4× less data → much faster detection
+      const MAX_W = 640;
+      const scale = Math.min(1, MAX_W / (video.videoWidth || MAX_W));
+      canvas.width  = Math.round(video.videoWidth  * scale);
+      canvas.height = Math.round(video.videoHeight * scale);
+
       const ctx = canvas.getContext('2d');
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const img  = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -162,7 +166,7 @@ const ScannerView = () => {
         handleScan(code.data);
         setTimeout(() => { coolRef.current = false; }, cooldownMs);
       }
-    }, 200);
+    }, 80); // 80ms interval — ~12 fps scan rate
     return () => clearInterval(loopRef.current);
   }, [active, cooldownMs]); // eslint-disable-line
 
