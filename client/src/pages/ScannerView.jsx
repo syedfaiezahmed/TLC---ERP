@@ -137,28 +137,39 @@ const ScannerView = () => {
   useEffect(() => {
     startCamera();
     return () => {
-      if (loopRef.current) clearInterval(loopRef.current);
       streamRef.current?.getTracks().forEach(t => t.stop());
     };
   }, []); // eslint-disable-line
 
-  // ── Scan loop ──────────────────────────────────────────────────────────────
+  // ── Scan loop (requestAnimationFrame — native 60 fps, non-blocking) ─────────
   useEffect(() => {
     if (!active) return;
-    loopRef.current = setInterval(() => {
+    let frameId;
+    let ctxCache = null; // reuse canvas context across frames
+
+    const tick = () => {
+      frameId = requestAnimationFrame(tick);
+
       const video  = videoRef.current;
       const canvas = canvasRef.current;
       if (!video || !canvas || video.readyState < video.HAVE_ENOUGH_DATA) return;
+      if (coolRef.current) return; // still in cooldown — skip frame
 
-      // Cap at 640×360 — jsQR processes 4× less data → much faster detection
-      const MAX_W = 640;
+      // Resize canvas only when video dimensions change (avoids realloc every frame)
+      const MAX_W = 480;
       const scale = Math.min(1, MAX_W / (video.videoWidth || MAX_W));
-      canvas.width  = Math.round(video.videoWidth  * scale);
-      canvas.height = Math.round(video.videoHeight * scale);
+      const w = Math.round(video.videoWidth  * scale);
+      const h = Math.round(video.videoHeight * scale);
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width  = w;
+        canvas.height = h;
+        ctxCache = null; // invalidate cached context on resize
+      }
 
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const img  = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      // willReadFrequently tells the browser to keep pixel data CPU-side
+      if (!ctxCache) ctxCache = canvas.getContext('2d', { willReadFrequently: true });
+      ctxCache.drawImage(video, 0, 0, w, h);
+      const img  = ctxCache.getImageData(0, 0, w, h);
       const code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
 
       if (code?.data && !coolRef.current) {
@@ -166,8 +177,10 @@ const ScannerView = () => {
         handleScan(code.data);
         setTimeout(() => { coolRef.current = false; }, cooldownMs);
       }
-    }, 80); // 80ms interval — ~12 fps scan rate
-    return () => clearInterval(loopRef.current);
+    };
+
+    frameId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frameId);
   }, [active, cooldownMs]); // eslint-disable-line
 
   // ── Handle scan result ─────────────────────────────────────────────────────
