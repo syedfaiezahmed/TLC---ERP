@@ -1,3 +1,4 @@
+import dns from 'dns';
 import express from 'express';
 import dotenv from 'dotenv';
 import path from 'path';
@@ -5,6 +6,9 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Force a public DNS resolver for MongoDB SRV lookups when local DNS refuses SRV queries
+dns.setServers(['8.8.8.8', '1.1.1.1']);
 
 // Load env vars immediately
 dotenv.config();

@@ -37,20 +37,18 @@ const getFeeCollectionReport = async (req, res) => {
         // We apply it below after the fee $lookup instead.
         const matchStage = { company: companyObjectId, status: 'active' };
 
-        // Date filtering — endDate must cover full day (set to 23:59:59 local)
-        if (startDate && endDate) {
-            const endOfDay = new Date(endDate);
-            endOfDay.setHours(23, 59, 59, 999);
-            matchStage.paymentDate = {
-                $gte: new Date(startDate),
-                $lte: endOfDay
-            };
-        } else if (startDate) {
-            matchStage.paymentDate = { $gte: new Date(startDate) };
-        } else if (endDate) {
-            const endOfDay = new Date(endDate);
-            endOfDay.setHours(23, 59, 59, 999);
-            matchStage.paymentDate = { $lte: endOfDay };
+        // Fee Collection Report is a cash-based view: filter by receipt date.
+        // Voucher date is preserved only for reference and must never overwrite payment date.
+        let dateRangeFilter = null;
+        if (startDate || endDate) {
+            const range = {};
+            if (startDate) range.$gte = new Date(startDate);
+            if (endDate) {
+                const endOfDay = new Date(endDate);
+                endOfDay.setHours(23, 59, 59, 999);
+                range.$lte = endOfDay;
+            }
+            dateRangeFilter = range;
         }
 
         // Additional filters
@@ -124,11 +122,26 @@ const getFeeCollectionReport = async (req, res) => {
             pipeline.push({ $match: enrollmentMatch });
         }
 
+        if (dateRangeFilter) {
+            pipeline.push({
+                $match: { paymentDate: dateRangeFilter }
+            });
+        }
+
         pipeline.push(
+            {
+                $addFields: {
+                    voucherMonth: '$voucher.month',
+                    voucherNumber: '$voucher.voucherNumber'
+                }
+            },
             {
                 $project: {
                     paymentNumber: 1,
                     paymentDate: 1,
+                    receiptDate: 1,
+                    voucherMonth: 1,
+                    voucherNumber: 1,
                     amount: 1,
                     paymentMethod: 1,
                     referenceNumber: 1,
@@ -142,7 +155,6 @@ const getFeeCollectionReport = async (req, res) => {
                     'fee.dueDate': 1,
                     'fee.totalAmount': 1,
                     'fee.status': 1,
-                    'voucher.voucherNumber': 1,
                     'receivedBy.name': 1
                 }
             },
@@ -451,14 +463,12 @@ const getStudentLedgerReport = async (req, res) => {
             company: companyObjectId,
             student: studentObjectId,
             status: { $ne: 'cancelled' },
-            ...dateInRange('generatedDate', startDate, endDate),
+            ...dateInRange('month', startDate, endDate),
         };
-        const vouchers = await FeeVoucher.find(voucherMatch).sort({ generatedDate: 1 }).lean();
+        const vouchers = await FeeVoucher.find(voucherMatch).sort({ month: 1 }).lean();
 
-        // ── CREDITS: Active payments, attributed to their voucher's period ──
-        // Accrual principle: if a payment was made in month M+1 for a voucher
-        // generated in month M, report it in month M (use voucher.generatedDate
-        // as the "reportingDate"). Payments with no voucher fall back to paymentDate.
+        // ── CREDITS: Active payments, shown by receipt date ──
+        // Combined ledger view: vouchers use voucher.month, payments use paymentDate.
         const paymentAggregatePipeline = [
             { $match: { company: companyObjectId, student: studentObjectId, status: 'active' } },
             { $lookup: { from: 'feevouchers', localField: 'voucher', foreignField: '_id', as: 'vDoc' } },
@@ -466,18 +476,18 @@ const getStudentLedgerReport = async (req, res) => {
             { $lookup: { from: 'users', localField: 'receivedBy', foreignField: '_id', as: 'receivedByDoc' } },
             { $unwind: { path: '$receivedByDoc', preserveNullAndEmptyArrays: true } },
             { $addFields: {
-                reportingDate: { $ifNull: ['$vDoc.generatedDate', '$paymentDate'] },
+                voucherMonth: '$vDoc.month',
                 receivedByName: '$receivedByDoc.name',
             }},
             ...(startDate || endDate ? [{
                 $match: {
-                    reportingDate: {
+                    paymentDate: {
                         ...(startDate ? { $gte: new Date(startDate) } : {}),
                         ...(endDate ? { $lte: (() => { const e = new Date(endDate); e.setHours(23,59,59,999); return e; })() } : {}),
                     },
                 },
             }] : []),
-            { $sort: { reportingDate: 1, createdAt: 1 } },
+            { $sort: { paymentDate: 1, createdAt: 1 } },
         ];
         const payments = await FeePayment.aggregate(paymentAggregatePipeline);
 
@@ -486,7 +496,7 @@ const getStudentLedgerReport = async (req, res) => {
 
         vouchers.forEach(v => {
             transactions.push({
-                date: v.generatedDate,
+                date: v.month,
                 type: 'voucher',
                 description: `Voucher #${v.voucherNumber || v._id} — ${v.feeMonth ? new Date(v.feeMonth).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'Fee'}`,
                 reference: v.voucherNumber,
@@ -499,18 +509,19 @@ const getStudentLedgerReport = async (req, res) => {
         });
 
         payments.forEach(p => {
-            const rDate = p.reportingDate ? new Date(p.reportingDate) : null;
-            const pDate = p.paymentDate   ? new Date(p.paymentDate)   : null;
-            const isLate = rDate && pDate && (
-                rDate.getFullYear() !== pDate.getFullYear() || rDate.getMonth() !== pDate.getMonth()
+            const pDate = p.paymentDate ? new Date(p.paymentDate) : null;
+            const vMonth = p.voucherMonth ? new Date(p.voucherMonth) : null;
+            const isLate = vMonth && pDate && (
+                vMonth.getFullYear() !== pDate.getFullYear() || vMonth.getMonth() !== pDate.getMonth()
             );
             const lateSuffix = isLate
-                ? ` (paid: ${pDate.toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' })})`
+                ? ` (voucher: ${vMonth.toLocaleDateString('en-PK', { month: 'short', year: 'numeric' })})`
                 : '';
             // Cash payment credit (reduces receivable)
             transactions.push({
-                date: p.reportingDate,        // accrual period (voucher month)
-                paymentDate: p.paymentDate,   // actual receipt date (for reference)
+                date: p.paymentDate,        // actual receipt date
+                paymentDate: p.paymentDate,   // actual receipt date
+                voucherMonth: p.voucherMonth,
                 type: 'payment',
                 description: `Payment #${p.paymentNumber} via ${p.paymentMethod}${lateSuffix}`,
                 reference: p.paymentNumber,
@@ -523,8 +534,9 @@ const getStudentLedgerReport = async (req, res) => {
             // Discount allowed is a contra-revenue credit that also reduces receivable.
             if (Number(p.discountAmount) > 0) {
                 transactions.push({
-                    date: p.reportingDate,
+                    date: p.paymentDate,
                     paymentDate: p.paymentDate,
+                    voucherMonth: p.voucherMonth,
                     type: 'discount',
                     description: `Discount allowed on ${p.paymentNumber}${p.discountReason ? ` — ${p.discountReason}` : ''}`,
                     reference: p.paymentNumber,
@@ -631,17 +643,35 @@ const getSummaryReport = async (req, res) => {
             {
                 $match: {
                     company: companyObjectId,
-                    paymentDate: { $gte: start, $lte: end },
                     status: 'active'
+                }
+            },
+            {
+                $lookup: {
+                    from: 'feevouchers',
+                    localField: 'voucher',
+                    foreignField: '_id',
+                    as: 'voucherDoc'
+                }
+            },
+            { $unwind: { path: '$voucherDoc', preserveNullAndEmptyArrays: true } },
+            {
+                $addFields: {
+                    reportingDate: { $ifNull: ['$voucherDoc.month', '$paymentDate'] }
+                }
+            },
+            {
+                $match: {
+                    reportingDate: { $gte: start, $lte: end }
                 }
             },
             {
                 $group: {
                     _id: {
-                        year: { $year: '$paymentDate' },
-                        month: { $month: '$paymentDate' },
-                        day: groupBy === 'day' ? { $dayOfMonth: '$paymentDate' } :
-                             groupBy === 'week' ? { $week: '$paymentDate' } : null
+                        year: { $year: '$reportingDate' },
+                        month: { $month: '$reportingDate' },
+                        day: groupBy === 'day' ? { $dayOfMonth: '$reportingDate' } :
+                             groupBy === 'week' ? { $week: '$reportingDate' } : null
                     },
                     totalAmount: { $sum: '$amount' },
                     totalLateFee: { $sum: { $ifNull: ['$lateFeeAmount', 0] } },
@@ -659,17 +689,17 @@ const getSummaryReport = async (req, res) => {
             {
                 $match: {
                     company: companyObjectId,
-                    generatedDate: { $gte: start, $lte: end },
+                    month: { $gte: start, $lte: end },
                     status: { $ne: 'cancelled' }
                 }
             },
             {
                 $group: {
                     _id: {
-                        year: { $year: '$generatedDate' },
-                        month: { $month: '$generatedDate' },
-                        day: groupBy === 'day' ? { $dayOfMonth: '$generatedDate' } :
-                             groupBy === 'week' ? { $week: '$generatedDate' } : null
+                        year: { $year: '$month' },
+                        month: { $month: '$month' },
+                        day: groupBy === 'day' ? { $dayOfMonth: '$month' } :
+                             groupBy === 'week' ? { $week: '$month' } : null
                     },
                     totalFees: { $sum: { $ifNull: ['$totalFee', 0] } },
                     feeCount: { $sum: 1 }
@@ -715,15 +745,15 @@ const getSummaryReport = async (req, res) => {
                 status: { $in: ['pending', 'partial', 'overdue'] },
             };
             if (startDate && endDate) {
-                pendingMatch.generatedDate = { $gte: start, $lte: end };
+                pendingMatch.month = { $gte: start, $lte: end };
             }
 
             const pendingVouchers = await FeeVoucher.find(pendingMatch, {
-                generatedDate: 1, totalFee: 1, paidAmount: 1, paymentDiscountTotal: 1,
+                month: 1, totalFee: 1, paidAmount: 1, paymentDiscountTotal: 1,
             }).lean();
 
             pendingVouchers.forEach(v => {
-                const d = new Date(v.generatedDate);
+                const d = new Date(v.month);
                 const key = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
                 const effectivePaid = (v.paidAmount || 0) + (v.paymentDiscountTotal || 0);
                 const balanceDue = Math.max(0, (v.totalFee || 0) - effectivePaid);

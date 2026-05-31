@@ -1,4 +1,9 @@
+import dns from 'dns';
 import mongoose from 'mongoose';
+
+// Use public DNS resolvers for SRV lookups if local DNS returns ECONNREFUSED.
+// This fixes Node.js SRV resolution failures for MongoDB Atlas in restricted environments.
+dns.setServers(['8.8.8.8', '1.1.1.1']);
 
 let cached = global.mongoose;
 
