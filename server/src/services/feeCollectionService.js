@@ -537,8 +537,14 @@ class FeeCollectionService {
     }
   }
 
-  async validatePaymentBeforeCollection(voucherId, amount, companyId) {
-    const voucher = await FeeVoucher.findOne({ _id: voucherId, company: companyId });
+  async validatePaymentBeforeCollection(paymentDataOrVoucherId, amountOrCompanyId, companyIdOptional) {
+    const isLegacyCall = typeof paymentDataOrVoucherId !== 'object' || paymentDataOrVoucherId === null;
+    const paymentData = isLegacyCall
+      ? { voucherId: paymentDataOrVoucherId, amount: amountOrCompanyId }
+      : paymentDataOrVoucherId;
+    const companyId = isLegacyCall ? companyIdOptional : amountOrCompanyId;
+
+    const voucher = await FeeVoucher.findOne({ _id: paymentData.voucherId, company: companyId });
 
     if (!voucher) throw new Error('Voucher not found');
     if (voucher.status === 'paid') throw new Error('Voucher is already paid');
@@ -549,16 +555,24 @@ class FeeCollectionService {
     const dueDate = new Date(voucher.dueDate);
     dueDate.setHours(0, 0, 0, 0);
     const isOverdue = today > dueDate;
-    // Use base totalFee for validation — late fee is opt-in, never block base-only payment
-    const applicableAmount = voucher.totalFee;
+
+    const lateFeeIncluded = Boolean(paymentData.lateFeeIncluded);
+    const lateFeeAmount = Number(paymentData.lateFeeAmount || voucher.lateFeeAmount || 0);
+    const applicableAmount = (isOverdue && lateFeeIncluded)
+      ? (voucher.totalWithLateFee || voucher.totalFee + lateFeeAmount)
+      : voucher.totalFee;
+
     const balanceDue = applicableAmount - (voucher.paidAmount || 0);
+    const numericAmount = Number(paymentData.amount);
 
     return {
-      isValid: Number(amount) <= balanceDue + 0.01,
+      isValid: numericAmount > 0 && Number.isFinite(numericAmount) && numericAmount <= balanceDue + 0.01,
       balanceDue,
       applicableAmount,
       voucherStatus: voucher.status,
       isOverdue,
+      lateFeeIncluded,
+      lateFeeAmount,
     };
   }
 }

@@ -23,8 +23,7 @@ class FeeCollectionController {
       // Validate payment before collection
       if (paymentData.voucherId && paymentData.amount) {
         const validation = await feeCollectionService.validatePaymentBeforeCollection(
-          paymentData.voucherId,
-          paymentData.amount,
+          paymentData,
           companyId
         );
 
@@ -235,8 +234,7 @@ class FeeCollectionController {
       }
 
       const validation = await feeCollectionService.validatePaymentBeforeCollection(
-        voucherId,
-        amount,
+        { voucherId, amount, lateFeeIncluded: req.body?.lateFeeIncluded, lateFeeAmount: req.body?.lateFeeAmount },
         companyId
       );
 
