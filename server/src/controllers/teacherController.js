@@ -179,8 +179,10 @@ const deleteTeacher = async (req, res) => {
     if (!company) return res.status(404).json({ message: 'Company not found' });
     if (!canAccessCompany(req.user, company)) return res.status(401).json({ message: 'Not authorized' });
 
-    const coursesCount = await Course.countDocuments({ teacher: teacher._id });
-    if (coursesCount > 0) return res.status(400).json({ message: 'Cannot delete teacher assigned to courses' });
+    // Force delete: ignore any course assignments
+    // Previously we prevented deletion if the teacher was assigned to courses.
+    // This check is removed to allow deletion at any cost.
+
 
     await teacher.deleteOne();
     try { await logAudit({ req, companyId: teacher.company, action: 'delete', entityType: 'teacher', entityId: teacher._id, before: teacher.toObject(), after: null }); } catch(_) {}
@@ -190,4 +192,28 @@ const deleteTeacher = async (req, res) => {
   }
 };
 
-export { createTeacher, getTeachers, updateTeacher, deleteTeacher };
+// @desc    Delete teacher by name and contact (admin only)
+// @route   DELETE /api/teachers/deleteByInfo?name=...&contact=...
+// @access  Private/Admin
+const deleteTeacherByInfo = async (req, res) => {
+  try {
+    const { name, contact } = req.query;
+    if (!name || !contact) {
+      return res.status(400).json({ message: 'Name and contact query parameters are required' });
+    }
+    const teacher = await Teacher.findOne({ name, contact });
+    if (!teacher) return res.status(404).json({ message: 'Teacher not found' });
+    const company = await Company.findById(teacher.company);
+    if (!company) return res.status(404).json({ message: 'Company not found' });
+    if (!canAccessCompany(req.user, company)) return res.status(401).json({ message: 'Not authorized' });
+    const coursesCount = await Course.countDocuments({ teacher: teacher._id });
+    if (coursesCount > 0) return res.status(400).json({ message: 'Cannot delete teacher assigned to courses' });
+    await teacher.deleteOne();
+    try { await logAudit({ req, companyId: teacher.company, action: 'delete', entityType: 'teacher', entityId: teacher._id, before: teacher.toObject(), after: null }); } catch (_) {}
+    return res.json({ message: 'Teacher removed by info' });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+export { createTeacher, getTeachers, updateTeacher, deleteTeacher, deleteTeacherByInfo };
